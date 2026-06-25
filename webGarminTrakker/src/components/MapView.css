@@ -1,0 +1,45 @@
+.map-view {
+  overflow: hidden;
+}
+
+.map-view__status,
+.map-view__users {
+  position: absolute;
+  z-index: 1000;
+  max-width: calc(100vw - 32px);
+  pointer-events: auto;
+}
+
+.map-view__status {
+  top: 16px;
+  left: 16px;
+}
+
+.map-view__users {
+  top: 16px;
+  right: 16px;
+}
+
+@media (max-width: 767px) {
+  .map-view__status {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    max-width: none;
+  }
+
+  .map-view__users {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    max-width: none;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: none;
+  }
+
+  .map-view__users > * {
+    pointer-events: auto;
+  }
+}

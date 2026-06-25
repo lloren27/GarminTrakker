@@ -1,0 +1,13 @@
+# Dependency directory
+node_modules
+
+# Build output
+dist/
+
+# Debug log from npm
+npm-debug.log
+
+# Environment Variables should NEVER be published
+.env
+.env.development
+.env.production

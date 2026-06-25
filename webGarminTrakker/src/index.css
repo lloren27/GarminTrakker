@@ -1,0 +1,153 @@
+:root {
+  /* Typography */
+  --font-family-base:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-xxl: 24px;
+  --font-size-title: 28px;
+  --font-size-hero: 32px;
+
+  --line-height-xs: 16px;
+  --line-height-sm: 20px;
+  --line-height-md: 24px;
+  --line-height-lg: 26px;
+  --line-height-xl: 28px;
+  --line-height-xxl: 32px;
+  --line-height-title: 36px;
+  --line-height-hero: 40px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semiBold: 600;
+  --font-weight-bold: 700;
+
+  /* Colors */
+  --color-primary: #2563eb;
+  --color-primary-dark: #1e3a8a;
+  --color-accent: #f4d35e;
+  --color-success: #22c55e;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+
+  --color-background: #f8fafc;
+  --color-background-secondary: #eff6ff;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f5f9;
+
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-on-primary: #ffffff;
+
+  --color-border: #e5e7eb;
+  --color-border-strong: #cbd5e1;
+
+  --color-map-user-marker: #2563eb;
+  --color-map-user-marker-border: #ffffff;
+  --color-map-status-active: #22c55e;
+
+  --color-overlay: rgba(15, 23, 42, 0.08);
+  --color-shadow: rgba(15, 23, 42, 0.12);
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 40px;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-family-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-primary-dark);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  border: none;
+  background: none;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+.leaflet-bottom.leaflet-right {
+  bottom: 16px;
+  right: 16px;
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
+  overflow: hidden;
+  border-radius: 14px !important;
+}
+
+.leaflet-control-zoom a {
+  width: 40px !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  font-size: 20px !important;
+}
+
+@media (max-width: 768px) {
+  .leaflet-bottom.leaflet-right {
+    bottom: 20px;
+    right: 14px;
+  }
+}
