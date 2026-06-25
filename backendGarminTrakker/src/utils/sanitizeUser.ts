@@ -12,7 +12,6 @@ export const sanitizeUser = (user: User) => {
     location: user.location,
     groups: user.groups,
     real_time_location: user.real_time_location,
-    push_token: user.push_token,
     emailVerified: user.emailVerified,
     isAdmin: isConfiguredAdmin(user),
     createdAt: user.createdAt,

@@ -27,7 +27,6 @@ export interface User {
   garminTracking?: UserGarminTracking;
   groups: ObjectId[];
   real_time_location: boolean;
-  push_token?: string;
 
   emailVerified?: boolean;
   isAdmin?: boolean;

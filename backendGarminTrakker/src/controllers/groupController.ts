@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { connectToDatabase } from "../config/db";
-import { sendOneSignalNotificationToUser } from "../services/pushNotificationsService";
 import { Group } from "../models/group";
 import { GroupLayer } from "../models/groupLayer";
 import { GroupLayerPreference } from "../models/groupLayerPreference";
@@ -364,51 +363,5 @@ export const deleteGroup = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error al eliminar grupo:", error);
     return res.status(500).json({ message: "Error interno del servidor" });
-  }
-};
-
-export const notifyGroup = async (req: Request, res: Response) => {
-  const { targetUserId, message } = req.body;
-  const { groupId } = req.params;
-
-  try {
-    const db = await connectToDatabase();
-
-    const groupObjectId = new ObjectId(groupId);
-    const targetObjectId = new ObjectId(targetUserId);
-
-    const group = await db.collection("groups").findOne({ _id: groupObjectId });
-
-    if (!group) {
-      return res.status(404).json({ message: "Grupo no encontrado" });
-    }
-
-    const allGroupUserIds = [group.owner, ...group.users];
-    const isTargetInGroup = allGroupUserIds.some((id: ObjectId) =>
-      id.equals(targetObjectId),
-    );
-
-    if (!isTargetInGroup) {
-      return res
-        .status(403)
-        .json({ message: "El usuario no pertenece al grupo" });
-    }
-
-    const user = await db.collection("users").findOne({ _id: targetObjectId });
-
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
-
-    await sendOneSignalNotificationToUser(
-      targetUserId,
-      "¡Atención!",
-      message,
-    );
-
-    return res.status(200).json({ message: "Notificación enviada" });
-  } catch (error) {
-    console.error("❌ Error en notifyGroup:", error);
-    return res.status(500).json({ message: "Error enviando notificaciones" });
   }
 };

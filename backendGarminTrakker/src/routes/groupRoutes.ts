@@ -7,7 +7,6 @@ import {
   getGroupTracking,
   joinGroupByInvite,
   deleteGroup,
-  notifyGroup,
 } from "../controllers/groupController";
 import {
   createGroupLayer,
@@ -33,7 +32,6 @@ router.get("/:groupId/layer-preferences", getGroupLayerPreference);
 router.patch("/:groupId/layer-preferences", updateGroupLayerPreference);
 router.patch("/:groupId/layers/:layerId", updateGroupLayer);
 router.delete("/:groupId/layers/:layerId", deleteGroupLayer);
-router.post("/:groupId/notify", notifyGroup);
 router.delete("/:groupId", deleteGroup);
 
 export default router;
