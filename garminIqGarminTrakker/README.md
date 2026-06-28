@@ -18,12 +18,20 @@ El campo manda la ubicacion al backend cada 30 segundos cuando hay GPS.
 Edita [source/GarminTrakkerConfig.mc](source/GarminTrakkerConfig.mc) antes de probar:
 
 ```monkeyc
-const API_URL = "http://127.0.0.1:3000/api/connect-iq/live-update";
+const API_URL = "https://backendgarmintrakker-production.up.railway.app/api/connect-iq/live-update";
 const DEVICE_TOKEN = "dev-connect-iq-token";
 const USER_ID = "replace-with-user-object-id";
 ```
 
-En backend, `DEVICE_TOKEN` debe coincidir con `CONNECT_IQ_SHARED_TOKEN` cuando esa variable este definida. En desarrollo, si `CONNECT_IQ_SHARED_TOKEN` no existe, el backend permite la peticion para facilitar pruebas locales.
+En backend, `DEVICE_TOKEN` debe coincidir con `CONNECT_IQ_SHARED_TOKEN` cuando esa variable este definida. Para pruebas de campo con Railway, configura en Railway `CONNECT_IQ_SHARED_TOKEN=dev-connect-iq-token` o cambia ambos valores al token real que quieras usar.
+
+La web de seguimiento desplegada esta en:
+
+```txt
+https://webgarmintrakker-production.up.railway.app
+```
+
+El Data Field no llama a la web directamente; la web se usa para crear/unirse a grupos, cargar recorridos y ver el mapa.
 
 ## SDK local
 
