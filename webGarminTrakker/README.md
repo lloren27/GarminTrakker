@@ -28,6 +28,20 @@ Puede cambiarse con:
 VITE_API_URL=http://localhost:3000 npm run dev
 ```
 
+## Despliegue en Railway
+
+Configura `VITE_API_URL` en el servicio del frontend con la URL publica completa
+del backend:
+
+```env
+VITE_API_URL=https://backendgarmintrakker-production.up.railway.app
+```
+
+Al ser una variable de Vite, Railway debe volver a construir el frontend
+despues de cambiarla. La aplicacion tambien normaliza dominios sin protocolo y
+elimina la barra final para evitar que las rutas de la API se interpreten como
+rutas relativas del frontend.
+
 ## Demo
 
 Si el backend no expone aun `/api/v1/tracking/:trackingId`, la ruta `LAGOS26`
