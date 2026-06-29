@@ -7,17 +7,13 @@ import authRoutes from "./routes/authRoutes";
 import adminMapLayerRoutes from "./routes/adminMapLayerRoutes";
 import connectIqRoutes from "./routes/connectIqRoutes";
 import { authLimiter } from "./utils/rateLimit";
+import { corsOptions } from "./config/cors";
 
 const app = express();
 
 app.use(helmet());
 
-app.use(
-  cors({
-    origin: process.env.NODE_ENV === "production" ? true : true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  }),
-);
+app.use(cors(corsOptions));
 
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "25mb" }));
 

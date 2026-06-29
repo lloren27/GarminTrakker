@@ -8,13 +8,6 @@ const envFile =
 
 dotenv.config({ path: envFile });
 
-const mongoUri = process.env.MONGO_URI;
-const dbName = process.env.MONGO_DB_NAME || "garmintrakker";
-
-if (!mongoUri) {
-  throw new Error("MONGO_URI no está definida");
-}
-
 let client: MongoClient | null = null;
 let db: Db | null = null;
 
@@ -60,6 +53,18 @@ const createIndexes = async (db: Db) => {
 
 export const connectToDatabase = async (): Promise<Db> => {
   if (db) return db;
+
+  const mongoUri =
+    process.env.MONGO_URI ||
+    process.env.MONGODB_URI ||
+    process.env.MONGO_URL;
+  const dbName = process.env.MONGO_DB_NAME || "garmintrakker";
+
+  if (!mongoUri) {
+    throw new Error(
+      "MongoDB no está configurado. Define MONGO_URI, MONGODB_URI o MONGO_URL.",
+    );
+  }
 
   client = new MongoClient(mongoUri);
   await client.connect();

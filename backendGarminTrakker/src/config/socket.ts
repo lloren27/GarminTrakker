@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "./db";
 import { User } from "../models/user";
+import { corsOrigin } from "./cors";
 
 type SocketUserPayload = {
   userId: string;
@@ -90,7 +91,7 @@ const leaveAllGroupRooms = async (
 export const setupSocket = (server: any) => {
   const io = new Server(server, {
     cors: {
-      origin: "*",
+      origin: corsOrigin,
     },
   });
 
