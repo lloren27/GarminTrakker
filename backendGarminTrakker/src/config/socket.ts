@@ -4,6 +4,8 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "./db";
 import { User } from "../models/user";
 import { corsOrigin } from "./cors";
+import { Group } from "../models/group";
+import { getGarminStatusByUserIds } from "../services/garminDeviceService";
 
 type SocketUserPayload = {
   userId: string;
@@ -24,15 +26,30 @@ type UpdateLocationPayload = {
 };
 
 let socketServer: Server | null = null;
+let snapshotInterval: NodeJS.Timeout | null = null;
+const SNAPSHOT_INTERVAL_MS = 40 * 1000;
 
 const isValidCoordinate = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
 export const emitLocationUpdatedToUserGroups = async (
-  userId: string,
-  latitude: number,
-  longitude: number,
-  lastUpdateIso: string,
+  {
+    userId,
+    latitude,
+    longitude,
+    lastUpdateIso,
+    progressMeters,
+    averageSpeedKmH,
+    currentSpeedKmH,
+  }: {
+    userId: string;
+    latitude: number;
+    longitude: number;
+    lastUpdateIso: string;
+    progressMeters?: number;
+    averageSpeedKmH?: number;
+    currentSpeedKmH?: number;
+  },
 ): Promise<boolean> => {
   if (!socketServer || !ObjectId.isValid(userId)) {
     return false;
@@ -41,7 +58,7 @@ export const emitLocationUpdatedToUserGroups = async (
   const db = await connectToDatabase();
   const user = await db.collection<User>("users").findOne(
     { _id: new ObjectId(userId) },
-    { projection: { groups: 1 } },
+    { projection: { groups: 1, login: 1, email: 1 } },
   );
 
   if (!user) {
@@ -57,10 +74,106 @@ export const emitLocationUpdatedToUserGroups = async (
       latitude,
       longitude,
       last_update: lastUpdateIso,
+      username: user.login,
+      email: user.email,
+      progressMeters,
+      speedKmH: averageSpeedKmH,
+      currentSpeedKmH,
     });
   }
 
   return true;
+};
+
+const getGroupSnapshot = async (group: Group & { _id: ObjectId }) => {
+  const db = await connectToDatabase();
+  const memberIds = Array.from(
+    new Set([group.owner, ...(group.users || [])].map((id) => id.toString())),
+  ).map((id) => new ObjectId(id));
+  const [users, garminStatus] = await Promise.all([
+    db
+      .collection<User>("users")
+      .find(
+        { _id: { $in: memberIds } },
+        {
+          projection: {
+            login: 1,
+            email: 1,
+            location: 1,
+            garminTracking: 1,
+          },
+        },
+      )
+      .toArray(),
+    getGarminStatusByUserIds(memberIds),
+  ]);
+
+  return users.map((user) => {
+    const userId = user._id?.toString() ?? "";
+    const deviceStatus = garminStatus.get(userId);
+
+    return {
+      userId,
+      username: user.login,
+      email: user.email,
+      role:
+        userId === group.owner.toString() ? "owner" : "participant",
+      status: "accepted",
+      location: user.location
+        ? {
+            lat: user.location.latitude,
+            lng: user.location.longitude,
+            updatedAt: user.location.last_update,
+          }
+        : undefined,
+      progressMeters: user.garminTracking?.progressMeters,
+      speedKmH: user.garminTracking?.averageSpeedKmH,
+      currentSpeedKmH: user.garminTracking?.currentSpeedKmH,
+      garminPaired: deviceStatus?.paired ?? false,
+      garminOnline: deviceStatus?.online ?? false,
+      garminLastSeenAt: deviceStatus?.lastSeenAt,
+    };
+  });
+};
+
+const emitGroupSnapshot = async (
+  group: Group & { _id: ObjectId },
+  socket?: AuthenticatedSocket,
+): Promise<void> => {
+  const payload = {
+    groupId: group._id.toString(),
+    generatedAt: new Date().toISOString(),
+    participants: await getGroupSnapshot(group),
+  };
+
+  if (socket) {
+    socket.emit("trackingSnapshot", payload);
+    return;
+  }
+
+  socketServer
+    ?.to(`group:${group._id.toString()}`)
+    .emit("trackingSnapshot", payload);
+};
+
+const broadcastTrackingSnapshots = async (): Promise<void> => {
+  if (!socketServer) return;
+
+  try {
+    const db = await connectToDatabase();
+    const groups = await db
+      .collection<Group>("groups")
+      .find({})
+      .toArray();
+
+    await Promise.all(
+      groups
+        .filter((group): group is Group & { _id: ObjectId } => Boolean(group._id))
+        .map((group) => emitGroupSnapshot(group)),
+    );
+  } catch (error) {
+    console.error("Error emitiendo snapshots de tracking:", error);
+  }
 };
 
 const joinUserGroups = async (
@@ -151,6 +264,15 @@ export const setupSocket = (server: any) => {
       }
 
       await joinUserGroups(socket, user);
+
+      for (const groupId of user.groups || []) {
+        const group = await db
+          .collection<Group>("groups")
+          .findOne({ _id: groupId });
+        if (group?._id) {
+          await emitGroupSnapshot(group as Group & { _id: ObjectId }, socket);
+        }
+      }
     } catch (error) {
       console.error("❌ Error uniendo usuario a rooms:", error);
       socket.disconnect();
@@ -222,12 +344,12 @@ export const setupSocket = (server: any) => {
             return;
           }
 
-          const emitted = await emitLocationUpdatedToUserGroups(
+          const emitted = await emitLocationUpdatedToUserGroups({
             userId,
             latitude,
             longitude,
             lastUpdateIso,
-          );
+          });
 
           if (!emitted) {
             callback?.({ ok: false, error: "Location broadcast failed" });
@@ -243,6 +365,31 @@ export const setupSocket = (server: any) => {
         }
       },
     );
+
+    socket.on("joinTracking", async (trackingId: string) => {
+      if (!ObjectId.isValid(trackingId)) return;
+
+      try {
+        const db = await connectToDatabase();
+        const group = await db.collection<Group>("groups").findOne({
+          _id: new ObjectId(trackingId),
+          $or: [
+            { owner: new ObjectId(userId) },
+            { users: new ObjectId(userId) },
+          ],
+        });
+
+        if (!group?._id) return;
+
+        await socket.join(`group:${trackingId}`);
+        await emitGroupSnapshot(
+          group as Group & { _id: ObjectId },
+          socket,
+        );
+      } catch (error) {
+        console.error("Error uniendo socket al tracking:", error);
+      }
+    });
 
     socket.on(
       "refreshGroups",
@@ -274,6 +421,14 @@ export const setupSocket = (server: any) => {
       console.log("🔴 Usuario desconectado:", userId, socket.id, reason);
     });
   });
+
+  if (!snapshotInterval) {
+    snapshotInterval = setInterval(
+      () => void broadcastTrackingSnapshots(),
+      SNAPSHOT_INTERVAL_MS,
+    );
+    snapshotInterval.unref();
+  }
 
   return io;
 };

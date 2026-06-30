@@ -6,6 +6,7 @@ import { GroupLayerPreference } from "../models/groupLayerPreference";
 import { User } from "../models/user";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
+import { getGarminStatusByUserIds } from "../services/garminDeviceService";
 
 const generateInviteCode = () => {
   return crypto.randomBytes(3).toString("hex").toUpperCase();
@@ -98,8 +99,13 @@ export const getUserGroups = async (req: Request, res: Response) => {
 export const getGroupUsers = async (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
+    const currentUserId = req.user?.userId;
 
-    if (!ObjectId.isValid(groupId)) {
+    if (!currentUserId) {
+      return res.status(401).json({ message: "Usuario no autenticado" });
+    }
+
+    if (!ObjectId.isValid(groupId) || !ObjectId.isValid(currentUserId)) {
       return res.status(400).json({ message: "Formato de groupId inválido" });
     }
 
@@ -112,7 +118,11 @@ export const getGroupUsers = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Grupo no encontrado" });
     }
 
-    // Obtener información completa del owner
+    const currentUserObjectId = new ObjectId(currentUserId);
+    if (!isGroupMember(group, currentUserObjectId)) {
+      return res.status(403).json({ message: "No perteneces a este grupo" });
+    }
+
     const owner = await db
       .collection<User>("users")
       .findOne({ _id: group.owner }, { projection: { password: 0 } });
@@ -123,7 +133,6 @@ export const getGroupUsers = async (req: Request, res: Response) => {
         .json({ message: "Propietario del grupo no encontrado" });
     }
 
-    // Obtener los participantes excluyendo al owner
     const participants = await db
       .collection<User>("users")
       .find(
@@ -139,13 +148,36 @@ export const getGroupUsers = async (req: Request, res: Response) => {
         { projection: { password: 0 } },
       )
       .toArray();
+    const allUsers = [owner, ...participants];
+    const garminStatus = await getGarminStatusByUserIds(
+      allUsers
+        .map((user) => user._id)
+        .filter((id): id is ObjectId => Boolean(id)),
+    );
+    const serializeUser = (user: User, role: "owner" | "participant") => {
+      const id = user._id?.toString() ?? "";
+      const status = garminStatus.get(id);
 
-    const response = {
-      owner,
-      participants,
+      return {
+        _id: id,
+        login: user.login,
+        email: user.email,
+        role,
+        locationUpdatedAt: user.location?.last_update,
+        garminPaired: status?.paired ?? false,
+        garminOnline: status?.online ?? false,
+        garminLastSeenAt: status?.lastSeenAt,
+      };
     };
 
-    res.status(201).json(response);
+    const response = {
+      owner: serializeUser(owner, "owner"),
+      participants: participants.map((participant) =>
+        serializeUser(participant, "participant"),
+      ),
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     console.error("Error al obtener usuarios del grupo:", error);
     res.status(500).send("Error interno del servidor.");
@@ -202,6 +234,7 @@ export const getGroupTracking = async (req: Request, res: Response) => {
         },
       )
       .toArray();
+    const garminStatus = await getGarminStatusByUserIds(memberIds);
 
     const routeLayer = await db
       .collection<GroupLayer>("groupLayers")
@@ -227,7 +260,14 @@ export const getGroupTracking = async (req: Request, res: Response) => {
           }
         : undefined,
       progressMeters: user.garminTracking?.progressMeters,
-      speedKmH: undefined,
+      speedKmH: user.garminTracking?.averageSpeedKmH,
+      currentSpeedKmH: user.garminTracking?.currentSpeedKmH,
+      garminPaired:
+        garminStatus.get(user._id?.toString() ?? "")?.paired ?? false,
+      garminOnline:
+        garminStatus.get(user._id?.toString() ?? "")?.online ?? false,
+      garminLastSeenAt: garminStatus.get(user._id?.toString() ?? "")
+        ?.lastSeenAt,
       team:
         user._id?.toString() === group.owner.toString()
           ? "Organizacion"

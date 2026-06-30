@@ -48,6 +48,22 @@ const createIndexes = async (db: Db) => {
 
   await db.collection("password_reset_tokens").createIndex({ expiresAt: 1 });
 
+  await db
+    .collection("garminDevices")
+    .createIndex({ tokenHash: 1 }, { unique: true });
+  await db
+    .collection("garminDevices")
+    .createIndex({ deviceIdHash: 1 }, { unique: true });
+  await db.collection("garminDevices").createIndex({ userId: 1 });
+
+  await db
+    .collection("garminPairings")
+    .createIndex({ codeHash: 1 }, { unique: true });
+  await db.collection("garminPairings").createIndex({ deviceIdHash: 1 });
+  await db
+    .collection("garminPairings")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
   console.log("✅ Índices creados");
 };
 

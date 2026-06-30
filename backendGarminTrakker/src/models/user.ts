@@ -23,7 +23,7 @@ export interface User {
 
   avatar?: UserAvatar; // 👈 NUEVO
 
-  location: UserLocation;
+  location?: UserLocation;
   garminTracking?: UserGarminTracking;
   groups: ObjectId[];
   real_time_location: boolean;

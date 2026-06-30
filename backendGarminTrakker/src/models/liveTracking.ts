@@ -5,6 +5,9 @@ export interface LiveTrackingLocationInput {
   latitude: number;
   longitude: number;
   elapsedDistanceMeters?: number;
+  averageSpeedMps?: number;
+  currentSpeedMps?: number;
+  timerTimeSeconds?: number;
   source: "connect_iq" | "api" | "socket";
 }
 
@@ -12,7 +15,9 @@ export interface LiveTrackingPeer {
   userId: string;
   name: string;
   deltaMeters: number;
+  gapSeconds?: number;
   progressMeters: number;
+  averageSpeedKmH?: number;
   last_update: string;
 }
 
@@ -26,6 +31,9 @@ export interface LiveTrackingSummary {
 export interface UserGarminTracking {
   elapsedDistanceMeters?: number;
   progressMeters?: number;
+  averageSpeedKmH?: number;
+  currentSpeedKmH?: number;
+  timerTimeSeconds?: number;
   source: "connect_iq" | "api" | "socket";
   last_update: string;
 }

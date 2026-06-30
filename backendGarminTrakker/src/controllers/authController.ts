@@ -121,22 +121,17 @@ const revokeStoredRefreshToken = async (
 
 export const registerUser = async (req: Request, res: Response) => {
   try {
-    const { email, login, password, confirmPassword, location, avatar } =
-      req.body;
+    const { email, login, password, confirmPassword, avatar } = req.body;
 
     if (
       !email ||
       !login ||
       !password ||
-      !confirmPassword ||
-      !location ||
-      location.latitude === undefined ||
-      location.longitude === undefined
+      !confirmPassword
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "Email, login, contraseña, confirmación de contraseña y ubicación son obligatorios",
+        message: "Email, login y contraseña son obligatorios",
       });
     }
 
@@ -189,11 +184,6 @@ export const registerUser = async (req: Request, res: Response) => {
       password: hashedPassword,
       avatar: avatar ?? undefined,
       groups: [],
-      location: {
-        latitude: Number(location.latitude),
-        longitude: Number(location.longitude),
-        last_update: now,
-      },
       real_time_location: true,
       emailVerified: false,
       failedLoginAttempts: 0,

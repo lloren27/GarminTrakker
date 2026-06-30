@@ -45,9 +45,11 @@ const getDisplayName = (user: LiveTrackingUserProjection): string => {
 const buildPeer = (
   user: LiveTrackingUserProjection,
   deltaMeters: number,
+  currentAverageSpeedKmH?: number,
 ): LiveTrackingPeer | null => {
   const progressMeters = user.garminTracking?.progressMeters;
   const lastUpdate = user.garminTracking?.last_update;
+  const peerAverageSpeedKmH = user.garminTracking?.averageSpeedKmH;
 
   if (
     !user._id ||
@@ -58,11 +60,26 @@ const buildPeer = (
     return null;
   }
 
+  const validSpeeds = [currentAverageSpeedKmH, peerAverageSpeedKmH].filter(
+    (speed): speed is number =>
+      typeof speed === "number" && Number.isFinite(speed) && speed > 0,
+  );
+  const referenceSpeedKmH =
+    validSpeeds.length > 0
+      ? validSpeeds.reduce((total, speed) => total + speed, 0) /
+        validSpeeds.length
+      : undefined;
+  const gapSeconds = referenceSpeedKmH
+    ? Math.round(Math.abs(deltaMeters) / (referenceSpeedKmH / 3.6))
+    : undefined;
+
   return {
     userId: user._id.toString(),
     name: getDisplayName(user),
     deltaMeters: Math.round(Math.abs(deltaMeters)),
+    gapSeconds,
     progressMeters,
+    averageSpeedKmH: peerAverageSpeedKmH,
     last_update: lastUpdate as string,
   };
 };
@@ -70,6 +87,7 @@ const buildPeer = (
 const findNearestPeers = async (
   userId: ObjectId,
   progressMeters?: number,
+  averageSpeedKmH?: number,
 ): Promise<Pick<LiveTrackingSummary, "ahead" | "behind">> => {
   if (typeof progressMeters !== "number" || !Number.isFinite(progressMeters)) {
     return { ahead: null, behind: null };
@@ -114,7 +132,7 @@ const findNearestPeers = async (
     }
 
     const deltaMeters = peerProgress - progressMeters;
-    const candidate = buildPeer(peer, deltaMeters);
+    const candidate = buildPeer(peer, deltaMeters, averageSpeedKmH);
     if (!candidate) {
       continue;
     }
@@ -138,6 +156,9 @@ export const updateLiveTrackingLocation = async ({
   latitude,
   longitude,
   elapsedDistanceMeters,
+  averageSpeedMps,
+  currentSpeedMps,
+  timerTimeSeconds,
   source,
 }: LiveTrackingLocationInput): Promise<LiveTrackingSummary | null> => {
   if (!ObjectId.isValid(userId)) {
@@ -152,6 +173,18 @@ export const updateLiveTrackingLocation = async ({
     Number.isFinite(elapsedDistanceMeters) &&
     elapsedDistanceMeters >= 0
       ? elapsedDistanceMeters
+      : undefined;
+  const averageSpeedKmH =
+    typeof averageSpeedMps === "number" &&
+    Number.isFinite(averageSpeedMps) &&
+    averageSpeedMps >= 0
+      ? averageSpeedMps * 3.6
+      : undefined;
+  const currentSpeedKmH =
+    typeof currentSpeedMps === "number" &&
+    Number.isFinite(currentSpeedMps) &&
+    currentSpeedMps >= 0
+      ? currentSpeedMps * 3.6
       : undefined;
 
   const updateFields: Record<string, unknown> = {
@@ -169,6 +202,22 @@ export const updateLiveTrackingLocation = async ({
     updateFields["garminTracking.progressMeters"] = progressMeters;
   }
 
+  if (typeof averageSpeedKmH === "number") {
+    updateFields["garminTracking.averageSpeedKmH"] = averageSpeedKmH;
+  }
+
+  if (typeof currentSpeedKmH === "number") {
+    updateFields["garminTracking.currentSpeedKmH"] = currentSpeedKmH;
+  }
+
+  if (
+    typeof timerTimeSeconds === "number" &&
+    Number.isFinite(timerTimeSeconds) &&
+    timerTimeSeconds >= 0
+  ) {
+    updateFields["garminTracking.timerTimeSeconds"] = timerTimeSeconds;
+  }
+
   const result = await db.collection("users").updateOne(
     { _id: userObjectId },
     { $set: updateFields },
@@ -178,14 +227,21 @@ export const updateLiveTrackingLocation = async ({
     return null;
   }
 
-  await emitLocationUpdatedToUserGroups(
+  await emitLocationUpdatedToUserGroups({
     userId,
     latitude,
     longitude,
     lastUpdateIso,
-  );
+    progressMeters,
+    averageSpeedKmH,
+    currentSpeedKmH,
+  });
 
-  const peers = await findNearestPeers(userObjectId, progressMeters);
+  const peers = await findNearestPeers(
+    userObjectId,
+    progressMeters,
+    averageSpeedKmH,
+  );
 
   return {
     progressMeters,
