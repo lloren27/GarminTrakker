@@ -35,6 +35,22 @@ export type GroupLayer = {
   updatedAt: string;
 };
 
+export type GroupMember = {
+  _id: string;
+  login: string;
+  email: string;
+  role: "owner" | "participant";
+  locationUpdatedAt?: string;
+  garminPaired: boolean;
+  garminOnline: boolean;
+  garminLastSeenAt?: string;
+};
+
+export type GroupMembersResponse = {
+  owner: GroupMember;
+  participants: GroupMember[];
+};
+
 export function getGroups() {
   return apiRequest<Group[]>("/groups");
 }
@@ -70,4 +86,8 @@ export function uploadGroupRoute(
 
 export function getGroupTracking(groupId: string) {
   return apiRequest<TrackingRouteResponse>(`/groups/${groupId}/tracking`);
+}
+
+export function getGroupMembers(groupId: string) {
+  return apiRequest<GroupMembersResponse>(`/groups/${groupId}/users`);
 }

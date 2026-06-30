@@ -8,9 +8,9 @@ import "./AppPages.css";
 export default function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [loginValue, setLoginValue] = useState("lloren@garmintrakker.local");
-  const [email, setEmail] = useState("nuevo@garmintrakker.local");
-  const [password, setPassword] = useState("Garmin123!");
+  const [loginValue, setLoginValue] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -76,6 +76,7 @@ export default function AuthPage() {
               value={loginValue}
               onChange={(event) => setLoginValue(event.target.value)}
               autoComplete="username"
+              placeholder="Usuario o correo"
               required
             />
           </label>
@@ -88,6 +89,7 @@ export default function AuthPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
+                placeholder="nombre@correo.com"
                 required
               />
             </label>
@@ -100,6 +102,7 @@ export default function AuthPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
+              placeholder="Contraseña"
               required
             />
           </label>
@@ -110,10 +113,6 @@ export default function AuthPage() {
             {loading ? "Procesando..." : mode === "login" ? "Entrar" : "Crear cuenta"}
           </button>
         </form>
-
-        <div className="gt-demo-note">
-          Demo: `lloren@garmintrakker.local` / `Garmin123!`
-        </div>
       </section>
     </main>
   );

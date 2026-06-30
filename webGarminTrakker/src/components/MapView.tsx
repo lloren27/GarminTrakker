@@ -144,6 +144,7 @@ const buildLiveUserFromParticipant = (
     isOwner: participant.role === "owner",
     progressMeters: participant.progressMeters,
     speedKmH: participant.speedKmH,
+    currentSpeedKmH: participant.currentSpeedKmH,
     trail,
   };
 };
@@ -298,6 +299,10 @@ export default function MapView({
             payload.speedKmH ??
             previousUser?.speedKmH ??
             participant?.speedKmH,
+          currentSpeedKmH:
+            payload.currentSpeedKmH ??
+            previousUser?.currentSpeedKmH ??
+            participant?.currentSpeedKmH,
           trail: [...previousTrail, nextTrailPoint].slice(
             -MAX_VISIBLE_TRAIL_POINTS,
           ),
@@ -385,7 +390,7 @@ export default function MapView({
           error={error}
           totalDistanceKm={totalDistanceKm}
           remainingDistanceKm={remainingDistanceKm}
-          averageSpeedKmH={undefined}
+          averageSpeedKmH={selectedLiveUser?.speedKmH}
         />
       </div>
 

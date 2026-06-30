@@ -42,10 +42,6 @@ export async function register({
       email,
       password,
       confirmPassword: password,
-      location: {
-        latitude: 43.32321,
-        longitude: -5.02013,
-      },
     }),
   });
 

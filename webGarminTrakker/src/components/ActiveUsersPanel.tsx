@@ -24,6 +24,7 @@ type RaceRow = {
   hasLivePosition: boolean;
   progressMeters: number;
   speedKmH?: number;
+  currentSpeedKmH?: number;
   liveUser?: LiveUser;
 };
 
@@ -34,6 +35,9 @@ function formatLastSeen(updatedAt?: number): string {
 
   if (seconds < 5) return "Directo";
   if (seconds < 60) return `+${seconds}s señal`;
+  if (seconds >= 24 * 60 * 60) {
+    return `+${Math.floor(seconds / (24 * 60 * 60))} d señal`;
+  }
 
   return `+${Math.floor(seconds / 60)} min señal`;
 }
@@ -45,11 +49,22 @@ function formatDistanceGap(deltaMeters: number): string {
   return `${Math.round(deltaMeters)} m`;
 }
 
-function formatTimeGap(deltaMeters: number, speedKmH?: number): string {
+function formatTimeGap(
+  deltaMeters: number,
+  ...speedsKmH: Array<number | undefined>
+): string {
   if (deltaMeters <= 0) return "0s";
 
-  const speedMetersPerSecond =
-    typeof speedKmH === "number" && speedKmH > 0 ? speedKmH / 3.6 : 8;
+  const validSpeeds = speedsKmH.filter(
+    (speed): speed is number =>
+      typeof speed === "number" && Number.isFinite(speed) && speed > 0,
+  );
+  const referenceSpeedKmH =
+    validSpeeds.length > 0
+      ? validSpeeds.reduce((total, speed) => total + speed, 0) /
+        validSpeeds.length
+      : 28.8;
+  const speedMetersPerSecond = referenceSpeedKmH / 3.6;
   const seconds = Math.round(deltaMeters / speedMetersPerSecond);
 
   if (seconds < 60) return `${seconds}s`;
@@ -144,6 +159,8 @@ export default function ActiveUsersPanel({
           progressMeters:
             liveUser?.progressMeters ?? participant.progressMeters ?? 0,
           speedKmH: liveUser?.speedKmH ?? participant.speedKmH,
+          currentSpeedKmH:
+            liveUser?.currentSpeedKmH ?? participant.currentSpeedKmH,
           liveUser,
         };
       },
@@ -169,6 +186,7 @@ export default function ActiveUsersPanel({
         hasLivePosition: true,
         progressMeters: user.progressMeters ?? 0,
         speedKmH: user.speedKmH,
+        currentSpeedKmH: user.currentSpeedKmH,
         liveUser: user,
       }));
 
@@ -318,7 +336,11 @@ export default function ActiveUsersPanel({
                             {formatDistanceGap(gapMeters)}
                           </strong>
                           <span style={styles.gapTime}>
-                            {formatTimeGap(gapMeters, row.speedKmH)}
+                            {formatTimeGap(
+                              gapMeters,
+                              leader?.speedKmH,
+                              row.speedKmH,
+                            )}
                           </span>
                         </div>
                       </div>
@@ -335,7 +357,9 @@ export default function ActiveUsersPanel({
                       <div style={styles.rowMeta}>
                         <span>{(row.progressMeters / 1000).toFixed(1)} km</span>
                         <span>
-                          {row.speedKmH ? `${row.speedKmH.toFixed(1)} km/h` : "-- km/h"}
+                          {row.speedKmH
+                            ? `${row.speedKmH.toFixed(1)} km/h`
+                            : "-- km/h"}
                         </span>
                         <span>{formatLastSeen(row.updatedAt)}</span>
                       </div>

@@ -18,6 +18,10 @@ export interface TrackingParticipant {
   };
   progressMeters?: number;
   speedKmH?: number;
+  currentSpeedKmH?: number;
+  garminPaired?: boolean;
+  garminOnline?: boolean;
+  garminLastSeenAt?: string;
   locationTrail?: Array<{
     lat: number;
     lng: number;

@@ -78,6 +78,11 @@ export function useSocket(
       latitude?: number;
       longitude?: number;
       last_update?: string;
+      username?: string;
+      email?: string;
+      progressMeters?: number;
+      speedKmH?: number;
+      currentSpeedKmH?: number;
     }) => {
       if (
         !payload.userId ||
@@ -89,15 +94,22 @@ export function useSocket(
 
       onLocationRef.current({
         userId: payload.userId,
+        username: payload.username,
+        email: payload.email,
         coords: {
           lat: payload.latitude,
           lng: payload.longitude,
         },
         updatedAt: payload.last_update,
+        progressMeters: payload.progressMeters,
+        speedKmH: payload.speedKmH,
+        currentSpeedKmH: payload.currentSpeedKmH,
       });
     };
 
-    const handleParticipantsPayload = (payload: any) => {
+    const handleParticipantsPayload = (payload: {
+      participants?: TrackingParticipant[];
+    }) => {
       if (!Array.isArray(payload?.participants)) return;
       onParticipantsRef.current?.(payload.participants);
     };

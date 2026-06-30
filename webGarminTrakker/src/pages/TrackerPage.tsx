@@ -13,6 +13,8 @@ export default function TrackerPage() {
   const [routeData, setRouteData] = useState<FeatureCollection | null>(null);
   const [routeName, setRouteName] = useState<string>("");
   const [participants, setParticipants] = useState<TrackingParticipant[]>([]);
+  const [expiresAt, setExpiresAt] = useState<string | undefined>();
+  const [isPublic, setIsPublic] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isDemoRoute =
@@ -21,28 +23,43 @@ export default function TrackerPage() {
 
   useEffect(() => {
     if (!trackingId || !canViewTracking) return;
+    let isActive = true;
 
-    const loadTracking = async () => {
+    const loadTracking = async (showLoading: boolean) => {
       try {
-        setLoading(true);
+        if (showLoading) setLoading(true);
         setError(null);
 
         const response = await fetchRouteByTrackingId(trackingId);
+        if (!isActive) return;
 
         setRouteData(response.route.dataRouteJson);
         setRouteName(response.route.name);
         setParticipants(response.participants ?? []);
+        setExpiresAt(response.expiresAt);
+        setIsPublic(response.isPublic);
       } catch (err: unknown) {
         console.error("Error loading tracking route:", err);
-        setError(
-          err instanceof Error ? err.message : "No se pudo cargar el tracking",
-        );
+        if (isActive) {
+          setError(
+            err instanceof Error ? err.message : "No se pudo cargar el tracking",
+          );
+        }
       } finally {
-        setLoading(false);
+        if (isActive && showLoading) setLoading(false);
       }
     };
 
-    loadTracking();
+    void loadTracking(true);
+    const refreshInterval = window.setInterval(
+      () => void loadTracking(false),
+      45_000,
+    );
+
+    return () => {
+      isActive = false;
+      window.clearInterval(refreshInterval);
+    };
   }, [canViewTracking, trackingId]);
 
   if (!canViewTracking) {
@@ -83,6 +100,8 @@ export default function TrackerPage() {
       trackingId={trackingId}
       routeName={routeName}
       participants={participants}
+      expiresAt={expiresAt}
+      isPublic={isPublic}
     />
   );
 }

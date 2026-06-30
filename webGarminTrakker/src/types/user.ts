@@ -15,6 +15,7 @@ export type LiveUser = {
   isOwner?: boolean;
   progressMeters?: number;
   speedKmH?: number;
+  currentSpeedKmH?: number;
   bib?: string;
   team?: string;
   trail: LiveUserTrailPoint[];
@@ -31,6 +32,7 @@ export interface UserLocationUpdate {
   isOwner?: boolean;
   progressMeters?: number;
   speedKmH?: number;
+  currentSpeedKmH?: number;
   bib?: string;
   team?: string;
   updatedAt?: number | string;
