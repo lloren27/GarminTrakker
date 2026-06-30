@@ -13,17 +13,27 @@ La primera version se compila para Edge 530 y solo muestra:
 
 El campo manda la ubicacion al backend cada 30 segundos cuando hay GPS.
 
-## Configuracion de desarrollo
+## Vinculacion
+
+El `.prg` es el mismo para todos los usuarios y no contiene ningun `userId`.
+
+1. Instala el Data Field y anadelo a una pantalla de actividad.
+2. Con Garmin Connect conectado, el Edge mostrara un codigo como `ABCD-EFGH`.
+3. Entra en la web, abre `Mi Garmin` e introduce el codigo.
+4. El Edge recibira un token propio y lo guardara de forma persistente.
+5. Cuando haya GPS, enviara telemetria cada 30 segundos.
+
+El codigo temporal caduca a los 10 minutos. Si caduca, el Edge genera otro.
+
+## Configuracion
 
 Edita [source/GarminTrakkerConfig.mc](source/GarminTrakkerConfig.mc) antes de probar:
 
 ```monkeyc
-const API_URL = "https://backendgarmintrakker-production.up.railway.app/api/connect-iq/live-update";
-const DEVICE_TOKEN = "dev-connect-iq-token";
-const USER_ID = "replace-with-user-object-id";
+const PAIRING_START_URL = "https://backendgarmintrakker-production.up.railway.app/api/connect-iq/pairing/start";
+const PAIRING_STATUS_URL = "https://backendgarmintrakker-production.up.railway.app/api/connect-iq/pairing/status";
+const LIVE_UPDATE_URL = "https://backendgarmintrakker-production.up.railway.app/api/connect-iq/live-update";
 ```
-
-En backend, `DEVICE_TOKEN` debe coincidir con `CONNECT_IQ_SHARED_TOKEN` cuando esa variable este definida. Para pruebas de campo con Railway, configura en Railway `CONNECT_IQ_SHARED_TOKEN=dev-connect-iq-token` o cambia ambos valores al token real que quieras usar.
 
 La web de seguimiento desplegada esta en:
 
@@ -75,10 +85,12 @@ El Data Field manda cada 30 segundos:
 
 ```json
 {
-  "userId": "mongodb-object-id",
   "latitude": 43.123,
   "longitude": -5.456,
   "elapsedDistanceMeters": 12450,
+  "averageSpeedMps": 8.4,
+  "currentSpeedMps": 9.1,
+  "timerTimeSeconds": 1482,
   "recordedAtEpoch": 1782242400
 }
 ```
@@ -88,8 +100,8 @@ Y espera un resumen compacto:
 ```json
 {
   "success": true,
-  "ahead": { "name": "Ana", "deltaMeters": 320 },
-  "behind": { "name": "Luis", "deltaMeters": 180 },
+  "ahead": { "name": "Ana", "deltaMeters": 320, "gapSeconds": 39 },
+  "behind": { "name": "Luis", "deltaMeters": 180, "gapSeconds": 22 },
   "progressMeters": 12450
 }
 ```

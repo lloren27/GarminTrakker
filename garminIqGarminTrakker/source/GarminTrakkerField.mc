@@ -1,4 +1,5 @@
 import Toybox.Activity;
+import Toybox.Application.Storage;
 import Toybox.Communications;
 import Toybox.Graphics;
 import Toybox.Lang;
@@ -15,6 +16,10 @@ class GarminTrakkerField extends WatchUi.DataField {
     private var _requestInFlight as Boolean;
     private var _aheadLabel as String;
     private var _behindLabel as String;
+    private var _deviceId as String;
+    private var _deviceToken as String?;
+    private var _pairingCode as String?;
+    private var _lastPairingRequestEpoch as Number;
 
     public function initialize() {
         DataField.initialize();
@@ -26,11 +31,24 @@ class GarminTrakkerField extends WatchUi.DataField {
         _requestInFlight = false;
         _aheadLabel = "UP --";
         _behindLabel = "DN --";
+        _deviceId = getDeviceId();
+        _deviceToken = getStoredDeviceToken();
+        _pairingCode = null;
+        _lastPairingRequestEpoch = 0;
+
+        if (_deviceToken == null) {
+            _status = "PAIRING";
+        }
     }
 
     public function compute(info as Activity.Info) as Void {
         _distanceMeters = info.elapsedDistance;
         _hasLocation = info.currentLocation != null;
+
+        if (_deviceToken == null) {
+            handlePairing();
+            return;
+        }
 
         if (_hasLocation) {
             _status = "READY";
@@ -58,6 +76,11 @@ class GarminTrakkerField extends WatchUi.DataField {
         dc.setColor(fgColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(centerX, 8, Graphics.FONT_SMALL, "GarminTrakker", Graphics.TEXT_JUSTIFY_CENTER);
 
+        if (_deviceToken == null) {
+            drawPairingView(dc, centerX, height, fgColor);
+            return;
+        }
+
         var distanceLabel = formatDistance(_distanceMeters);
         dc.drawText(centerX, 50, Graphics.FONT_SMALL, _aheadLabel, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height / 2, Graphics.FONT_NUMBER_MEDIUM, distanceLabel, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
@@ -70,6 +93,161 @@ class GarminTrakkerField extends WatchUi.DataField {
             _status,
             Graphics.TEXT_JUSTIFY_CENTER
         );
+    }
+
+    private function drawPairingView(dc as Graphics.Dc, centerX as Number, height as Number, fgColor as Number) as Void {
+        dc.setColor(fgColor, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(centerX, 48, Graphics.FONT_SMALL, "VINCULAR EN WEB", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(
+            centerX,
+            height / 2,
+            Graphics.FONT_NUMBER_MEDIUM,
+            _pairingCode != null ? _pairingCode : "....",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+        );
+        dc.drawText(centerX, height - 44, Graphics.FONT_SMALL, _status, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    private function getDeviceId() as String {
+        var identifier = System.getDeviceSettings().uniqueIdentifier;
+
+        if (identifier instanceof String) {
+            return identifier;
+        }
+
+        return "garmintrakker-device";
+    }
+
+    private function getStoredDeviceToken() as String? {
+        var storedToken = Storage.getValue("deviceToken");
+
+        if (storedToken instanceof String && storedToken.length() > 0) {
+            return storedToken;
+        }
+
+        return null;
+    }
+
+    private function handlePairing() as Void {
+        if (_requestInFlight) {
+            return;
+        }
+
+        var now = Time.now().value();
+
+        if (_pairingCode == null) {
+            if ((now - _lastPairingRequestEpoch) >= GarminTrakkerConfig.PAIRING_POLL_SECONDS) {
+                requestPairingCode(now);
+            }
+            return;
+        }
+
+        if ((now - _lastPairingRequestEpoch) >= GarminTrakkerConfig.PAIRING_POLL_SECONDS) {
+            pollPairingStatus(now);
+        }
+    }
+
+    private function requestPairingCode(now as Number) as Void {
+        var params = {
+            "deviceId" => _deviceId,
+            "model" => "Garmin Edge"
+        };
+        var options = {
+            :method => Communications.HTTP_REQUEST_METHOD_POST,
+            :headers => {
+                "Content-Type" => Communications.REQUEST_CONTENT_TYPE_JSON
+            },
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+        };
+
+        _requestInFlight = true;
+        _lastPairingRequestEpoch = now;
+        _status = "GET CODE";
+
+        try {
+            Communications.makeWebRequest(
+                GarminTrakkerConfig.PAIRING_START_URL,
+                params,
+                options,
+                method(:onPairingCodeResponse)
+            );
+        } catch (ex) {
+            _requestInFlight = false;
+            _status = "PAIR ERR";
+            System.println("GarminTrakker pairing start error: " + ex.toString());
+        }
+    }
+
+    public function onPairingCodeResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
+        _requestInFlight = false;
+
+        if (responseCode != 201 || !(data instanceof Dictionary)) {
+            _status = "PAIR ERR " + responseCode.toString();
+            return;
+        }
+
+        var pairingCode = data["pairingCode"];
+        if (pairingCode instanceof String) {
+            _pairingCode = pairingCode;
+            _status = "ENTER IN WEB";
+        }
+    }
+
+    private function pollPairingStatus(now as Number) as Void {
+        var params = {
+            "deviceId" => _deviceId,
+            "pairingCode" => _pairingCode
+        };
+        var options = {
+            :method => Communications.HTTP_REQUEST_METHOD_POST,
+            :headers => {
+                "Content-Type" => Communications.REQUEST_CONTENT_TYPE_JSON
+            },
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+        };
+
+        _requestInFlight = true;
+        _lastPairingRequestEpoch = now;
+        _status = "WAIT WEB";
+
+        try {
+            Communications.makeWebRequest(
+                GarminTrakkerConfig.PAIRING_STATUS_URL,
+                params,
+                options,
+                method(:onPairingStatusResponse)
+            );
+        } catch (ex) {
+            _requestInFlight = false;
+            _status = "PAIR ERR";
+            System.println("GarminTrakker pairing status error: " + ex.toString());
+        }
+    }
+
+    public function onPairingStatusResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
+        _requestInFlight = false;
+
+        if (responseCode == 404) {
+            _pairingCode = null;
+            _status = "NEW CODE";
+            return;
+        }
+
+        if (responseCode != 200 || !(data instanceof Dictionary)) {
+            _status = "PAIR ERR " + responseCode.toString();
+            return;
+        }
+
+        var deviceToken = data["deviceToken"];
+        if (deviceToken instanceof String && deviceToken.length() > 0) {
+            Storage.setValue("deviceToken", deviceToken);
+            _deviceToken = deviceToken;
+            _pairingCode = null;
+            _status = "LINKED";
+            _lastSendEpoch = 0;
+        } else {
+            _status = "WAIT WEB";
+        }
     }
 
     private function formatDistance(distanceMeters as Float?) as String {
@@ -103,18 +281,26 @@ class GarminTrakkerField extends WatchUi.DataField {
         }
 
         var params = {
-            "userId" => GarminTrakkerConfig.USER_ID,
             "latitude" => position[0],
             "longitude" => position[1],
             "elapsedDistanceMeters" => elapsedDistance,
             "recordedAtEpoch" => now
         };
+        if (info.averageSpeed != null) {
+            params["averageSpeedMps"] = info.averageSpeed;
+        }
+        if (info.currentSpeed != null) {
+            params["currentSpeedMps"] = info.currentSpeed;
+        }
+        if (info.timerTime != null) {
+            params["timerTimeSeconds"] = info.timerTime / 1000.0f;
+        }
 
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_POST,
             :headers => {
                 "Content-Type" => Communications.REQUEST_CONTENT_TYPE_JSON,
-                "Authorization" => "Bearer " + GarminTrakkerConfig.DEVICE_TOKEN
+                "Authorization" => "Bearer " + _deviceToken
             },
             :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
         };
@@ -125,7 +311,7 @@ class GarminTrakkerField extends WatchUi.DataField {
 
         try {
             Communications.makeWebRequest(
-                GarminTrakkerConfig.API_URL,
+                GarminTrakkerConfig.LIVE_UPDATE_URL,
                 params,
                 options,
                 method(:onLiveUpdateResponse)
@@ -139,6 +325,15 @@ class GarminTrakkerField extends WatchUi.DataField {
 
     public function onLiveUpdateResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
         _requestInFlight = false;
+
+        if (responseCode == 401) {
+            Storage.deleteValue("deviceToken");
+            _deviceToken = null;
+            _pairingCode = null;
+            _lastPairingRequestEpoch = 0;
+            _status = "PAIR AGAIN";
+            return;
+        }
 
         if (responseCode != 200) {
             _status = "HTTP " + responseCode.toString();
@@ -172,7 +367,14 @@ class GarminTrakkerField extends WatchUi.DataField {
             return prefix + " --";
         }
 
-        return prefix + " " + name + " " + formatDelta(deltaMeters);
+        var gapSeconds = peer["gapSeconds"];
+        var label = prefix + " " + name + " " + formatDelta(deltaMeters);
+
+        if (gapSeconds instanceof Number) {
+            label += " " + formatGapTime(gapSeconds);
+        }
+
+        return label;
     }
 
     private function formatDelta(deltaMeters as Number) as String {
@@ -181,5 +383,13 @@ class GarminTrakkerField extends WatchUi.DataField {
         }
 
         return deltaMeters.format("%d") + "m";
+    }
+
+    private function formatGapTime(seconds as Number) as String {
+        if (seconds < 60) {
+            return seconds.format("%d") + "s";
+        }
+
+        return (seconds / 60).format("%d") + "m";
     }
 }
