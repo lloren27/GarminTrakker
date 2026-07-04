@@ -13,6 +13,10 @@ interface Props {
   totalDistanceKm?: number;
   remainingDistanceKm?: number;
   averageSpeedKmH?: number | null;
+  selectedRiderName?: string;
+  selectedProgressPercent?: number;
+  selectedIsOffRoute?: boolean;
+  selectedDistanceFromRouteMeters?: number;
 }
 
 function formatExpiry(expiresAt?: string): string {
@@ -44,6 +48,10 @@ export default function TrackingStatusCard({
   totalDistanceKm,
   remainingDistanceKm,
   averageSpeedKmH,
+  selectedRiderName,
+  selectedProgressPercent,
+  selectedIsOffRoute,
+  selectedDistanceFromRouteMeters,
 }: Props) {
   const [isMobile, setIsMobile] = useState(false);
   const [isExpanded, setIsExpanded] = useState(
@@ -64,7 +72,15 @@ export default function TrackingStatusCard({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const progress = calculateProgress(totalDistanceKm, remainingDistanceKm);
+  const calculatedProgress = calculateProgress(
+    totalDistanceKm,
+    remainingDistanceKm,
+  );
+  const progress =
+    typeof selectedProgressPercent === "number" &&
+    Number.isFinite(selectedProgressPercent)
+      ? Math.max(0, Math.min(100, selectedProgressPercent))
+      : calculatedProgress;
   const etaHours = calculateEtaHours(remainingDistanceKm ?? 0, averageSpeedKmH);
 
   if (isMobile && !isExpanded) {
@@ -116,9 +132,23 @@ export default function TrackingStatusCard({
         <div>
           <div style={styles.eyebrow}>Etapa</div>
           <h1 style={styles.title}>{routeName || "GarminTrakker Live"}</h1>
+          {selectedRiderName && (
+            <div style={styles.selectedRider}>
+              Siguiendo a <strong>{selectedRiderName}</strong>
+            </div>
+          )}
         </div>
         <div style={styles.stageBadge}>LAGOS26</div>
       </div>
+
+      {selectedIsOffRoute && (
+        <div style={styles.routeAlert}>
+          Fuera del recorrido
+          {typeof selectedDistanceFromRouteMeters === "number"
+            ? ` · ${Math.round(selectedDistanceFromRouteMeters)} m`
+            : ""}
+        </div>
+      )}
 
       <div style={styles.scoreboard}>
         <div style={styles.scoreItem}>
@@ -144,7 +174,7 @@ export default function TrackingStatusCard({
           <div style={styles.progressLabels}>
             <span>Salida</span>
             <strong>{progress.toFixed(0)}%</strong>
-            <span>Meta</span>
+            <span style={styles.progressEndLabel}>Meta</span>
           </div>
           <div style={styles.progressTrack}>
             <div
@@ -239,6 +269,12 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: "28px",
     letterSpacing: 0,
   },
+  selectedRider: {
+    marginTop: 4,
+    color: "#d1d5db",
+    fontSize: 12,
+    lineHeight: "16px",
+  },
   stageBadge: {
     flexShrink: 0,
     borderRadius: 8,
@@ -253,6 +289,15 @@ const styles: Record<string, CSSProperties> = {
     gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     borderTop: "1px solid rgba(255,255,255,0.12)",
     borderBottom: "1px solid rgba(255,255,255,0.12)",
+  },
+  routeAlert: {
+    borderTop: "1px solid rgba(248,113,113,0.3)",
+    padding: "8px 14px",
+    background: "#7f1d1d",
+    color: "#fee2e2",
+    fontSize: 12,
+    fontWeight: 900,
+    textTransform: "uppercase",
   },
   scoreItem: {
     minWidth: 0,
@@ -285,6 +330,9 @@ const styles: Record<string, CSSProperties> = {
     color: "#d1d5db",
     fontSize: 12,
     fontWeight: 800,
+  },
+  progressEndLabel: {
+    textAlign: "right",
   },
   progressTrack: {
     height: 9,

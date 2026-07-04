@@ -23,6 +23,13 @@ type RaceRow = {
   updatedAt: number;
   hasLivePosition: boolean;
   progressMeters: number;
+  progressSource?: "route" | "device";
+  remainingMeters?: number;
+  routeLengthMeters?: number;
+  progressPercent?: number;
+  distanceFromRouteMeters?: number;
+  isOffRoute?: boolean;
+  routeLayerId?: string;
   speedKmH?: number;
   currentSpeedKmH?: number;
   liveUser?: LiveUser;
@@ -95,6 +102,46 @@ function classifyRaceGroup(gapMeters: number, index: number): string {
   return "Peloton";
 }
 
+function isRouteRanked(row: RaceRow): boolean {
+  return (
+    row.progressSource === "route" &&
+    Boolean(row.routeLayerId) &&
+    Number.isFinite(row.progressMeters)
+  );
+}
+
+function getProgressPercent(
+  row: RaceRow,
+  fallbackTotalMeters: number | null,
+): number {
+  if (
+    typeof row.progressPercent === "number" &&
+    Number.isFinite(row.progressPercent)
+  ) {
+    return Math.max(0, Math.min(100, row.progressPercent));
+  }
+
+  const totalMeters = row.routeLengthMeters ?? fallbackTotalMeters;
+  if (!totalMeters || totalMeters <= 0) return 0;
+
+  return Math.max(0, Math.min(100, (row.progressMeters / totalMeters) * 100));
+}
+
+function getRemainingMeters(
+  row: RaceRow,
+  fallbackTotalMeters: number | null,
+): number | null {
+  if (
+    typeof row.remainingMeters === "number" &&
+    Number.isFinite(row.remainingMeters)
+  ) {
+    return Math.max(0, row.remainingMeters);
+  }
+
+  const totalMeters = row.routeLengthMeters ?? fallbackTotalMeters;
+  return totalMeters ? Math.max(0, totalMeters - row.progressMeters) : null;
+}
+
 export default function ActiveUsersPanel({
   users,
   participants = [],
@@ -158,6 +205,19 @@ export default function ActiveUsersPanel({
           hasLivePosition: Boolean(location),
           progressMeters:
             liveUser?.progressMeters ?? participant.progressMeters ?? 0,
+          progressSource:
+            liveUser?.progressSource ?? participant.progressSource,
+          remainingMeters:
+            liveUser?.remainingMeters ?? participant.remainingMeters,
+          routeLengthMeters:
+            liveUser?.routeLengthMeters ?? participant.routeLengthMeters,
+          progressPercent:
+            liveUser?.progressPercent ?? participant.progressPercent,
+          distanceFromRouteMeters:
+            liveUser?.distanceFromRouteMeters ??
+            participant.distanceFromRouteMeters,
+          isOffRoute: liveUser?.isOffRoute ?? participant.isOffRoute,
+          routeLayerId: liveUser?.routeLayerId ?? participant.routeLayerId,
           speedKmH: liveUser?.speedKmH ?? participant.speedKmH,
           currentSpeedKmH:
             liveUser?.currentSpeedKmH ?? participant.currentSpeedKmH,
@@ -185,22 +245,48 @@ export default function ActiveUsersPanel({
         updatedAt: user.updatedAt,
         hasLivePosition: true,
         progressMeters: user.progressMeters ?? 0,
+        progressSource: user.progressSource,
+        remainingMeters: user.remainingMeters,
+        routeLengthMeters: user.routeLengthMeters,
+        progressPercent: user.progressPercent,
+        distanceFromRouteMeters: user.distanceFromRouteMeters,
+        isOffRoute: user.isOffRoute,
+        routeLayerId: user.routeLayerId,
         speedKmH: user.speedKmH,
         currentSpeedKmH: user.currentSpeedKmH,
         liveUser: user,
       }));
 
-    return [...mergedFromParticipants, ...orphanLiveUsers].sort(
-      (a, b) => b.progressMeters - a.progressMeters,
-    );
+    return [...mergedFromParticipants, ...orphanLiveUsers].sort((a, b) => {
+      const routeRankDelta = Number(isRouteRanked(b)) - Number(isRouteRanked(a));
+      if (routeRankDelta !== 0) return routeRankDelta;
+
+      const progressDelta = b.progressMeters - a.progressMeters;
+      if (progressDelta !== 0) return progressDelta;
+
+      return b.updatedAt - a.updatedAt;
+    });
   }, [participants, users]);
 
-  const leader = raceRows[0];
+  const rankedRows = useMemo(
+    () => raceRows.filter(isRouteRanked),
+    [raceRows],
+  );
+  const unrankedRows = useMemo(
+    () => raceRows.filter((row) => !isRouteRanked(row)),
+    [raceRows],
+  );
+  const leader = rankedRows[0];
   const leaderProgress = leader?.progressMeters ?? 0;
   const totalDistanceMeters = totalDistanceKm ? totalDistanceKm * 1000 : null;
+  const rankingByUserId = useMemo(
+    () =>
+      new Map(rankedRows.map((row, index) => [row.userId, index + 1])),
+    [rankedRows],
+  );
 
   const raceGroups = useMemo(() => {
-    return raceRows.reduce<Record<string, RaceRow[]>>((groups, row, index) => {
+    return rankedRows.reduce<Record<string, RaceRow[]>>((groups, row, index) => {
       const gapMeters = Math.max(0, leaderProgress - row.progressMeters);
       const groupName = classifyRaceGroup(gapMeters, index);
 
@@ -209,7 +295,19 @@ export default function ActiveUsersPanel({
         [groupName]: [...(groups[groupName] ?? []), row],
       };
     }, {});
-  }, [leaderProgress, raceRows]);
+  }, [leaderProgress, rankedRows]);
+
+  const displayedGroups = useMemo(
+    () => [
+      ...Object.entries(raceGroups),
+      ...(unrankedRows.length > 0
+        ? ([["Pendientes de GPX", unrankedRows]] as Array<
+            [string, RaceRow[]]
+          >)
+        : []),
+    ],
+    [raceGroups, unrankedRows],
+  );
 
   return (
     <section
@@ -219,16 +317,20 @@ export default function ActiveUsersPanel({
       }}
       aria-label="Clasificacion de carrera"
     >
-      <button
-        type="button"
-        onClick={() => setIsOpen((previous) => !previous)}
-        style={{
-          ...styles.toggleButton,
-          ...(isMobile ? styles.toggleButtonMobile : {}),
-        }}
-      >
-        {isOpen ? "Ocultar carrera" : `Carrera (${raceRows.length})`}
-      </button>
+      {(!isMobile || !isOpen) && (
+        <button
+          type="button"
+          onClick={() => setIsOpen((previous) => !previous)}
+          style={{
+            ...styles.toggleButton,
+            ...(isMobile ? styles.toggleButtonMobile : {}),
+          }}
+        >
+          {isOpen
+            ? "Ocultar clasificación"
+            : `Clasificación (${rankedRows.length})`}
+        </button>
+      )}
 
       {isOpen && (
         <div
@@ -239,12 +341,25 @@ export default function ActiveUsersPanel({
         >
           <div style={styles.header}>
             <div>
-              <div style={styles.eyebrow}>Radio carrera</div>
-              <h2 style={styles.title}>GarminTrakker Live</h2>
+              <div style={styles.eyebrow}>Avance sobre el recorrido</div>
+              <h2 style={styles.title}>Clasificación en directo</h2>
             </div>
-            <div style={styles.livePill}>
-              <span style={styles.liveDot} />
-              Directo
+            <div style={styles.headerActions}>
+              <div style={styles.livePill}>
+                <span style={styles.liveDot} />
+                Directo
+              </div>
+              {isMobile && (
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  style={styles.closeButton}
+                  aria-label="Ocultar clasificación"
+                  title="Ocultar clasificación"
+                >
+                  x
+                </button>
+              )}
             </div>
           </div>
 
@@ -257,7 +372,9 @@ export default function ActiveUsersPanel({
             </div>
             <div>
               <span style={styles.stripLabel}>En carrera</span>
-              <strong style={styles.stripValue}>{raceRows.length}</strong>
+              <strong style={styles.stripValue}>
+                {rankedRows.length}/{raceRows.length}
+              </strong>
             </div>
             <div>
               <span style={styles.stripLabel}>Km líder</span>
@@ -267,7 +384,7 @@ export default function ActiveUsersPanel({
             </div>
           </div>
 
-          {Object.entries(raceGroups).map(([groupName, groupRows]) => (
+          {displayedGroups.map(([groupName, groupRows]) => (
             <div key={groupName} style={styles.groupBlock}>
               <div style={styles.groupTitleRow}>
                 <span style={styles.groupTitle}>{groupName}</span>
@@ -277,16 +394,20 @@ export default function ActiveUsersPanel({
               <div style={styles.list}>
                 {groupRows.map((row) => {
                   const displayName = getDisplayName(row);
+                  const rank = rankingByUserId.get(row.userId);
+                  const ranked = typeof rank === "number";
                   const gapMeters = Math.max(
                     0,
                     leaderProgress - row.progressMeters,
                   );
-                  const progressPercent = totalDistanceMeters
-                    ? Math.max(
-                        0,
-                        Math.min(100, (row.progressMeters / totalDistanceMeters) * 100),
-                      )
-                    : 0;
+                  const progressPercent = getProgressPercent(
+                    row,
+                    totalDistanceMeters,
+                  );
+                  const remainingMeters = getRemainingMeters(
+                    row,
+                    totalDistanceMeters,
+                  );
                   const isSelected = selectedUserId === row.userId;
 
                   return (
@@ -307,6 +428,14 @@ export default function ActiveUsersPanel({
                             lng: row.lng,
                             updatedAt: row.updatedAt,
                             progressMeters: row.progressMeters,
+                            progressSource: row.progressSource,
+                            remainingMeters: row.remainingMeters,
+                            routeLengthMeters: row.routeLengthMeters,
+                            progressPercent: row.progressPercent,
+                            distanceFromRouteMeters:
+                              row.distanceFromRouteMeters,
+                            isOffRoute: row.isOffRoute,
+                            routeLayerId: row.routeLayerId,
                             speedKmH: row.speedKmH,
                             trail: [],
                           } satisfies LiveUser);
@@ -322,10 +451,19 @@ export default function ActiveUsersPanel({
                     >
                       <div style={styles.rowTop}>
                         <div style={styles.identity}>
-                          <span style={styles.bib}>{row.bib ?? "--"}</span>
+                          <span
+                            style={{
+                              ...styles.rank,
+                              ...(rank === 1 ? styles.rankLeader : {}),
+                              ...(!ranked ? styles.rankPending : {}),
+                            }}
+                          >
+                            {ranked ? rank : "--"}
+                          </span>
                           <div style={styles.nameBlock}>
                             <strong style={styles.name}>{displayName}</strong>
                             <span style={styles.team}>
+                              {row.bib ? `Dorsal ${row.bib} · ` : ""}
                               {row.team ?? "Independiente"}
                             </span>
                           </div>
@@ -333,33 +471,58 @@ export default function ActiveUsersPanel({
 
                         <div style={styles.gapBlock}>
                           <strong style={styles.gapDistance}>
-                            {formatDistanceGap(gapMeters)}
+                            {!ranked
+                              ? "Sin GPX"
+                              : rank === 1
+                                ? "Líder"
+                                : `+${formatDistanceGap(gapMeters)}`}
                           </strong>
                           <span style={styles.gapTime}>
-                            {formatTimeGap(
-                              gapMeters,
-                              leader?.speedKmH,
-                              row.speedKmH,
-                            )}
+                            {ranked
+                              ? rank === 1
+                                ? `${progressPercent.toFixed(1)}%`
+                                : `+${formatTimeGap(
+                                    gapMeters,
+                                    leader?.speedKmH,
+                                    row.speedKmH,
+                                  )}`
+                              : "Esperando posición"}
                           </span>
                         </div>
                       </div>
+
+                      {row.isOffRoute && (
+                        <div style={styles.routeAlert}>
+                          Fuera de ruta
+                          {typeof row.distanceFromRouteMeters === "number"
+                            ? ` · ${formatDistanceGap(
+                                row.distanceFromRouteMeters,
+                              )}`
+                            : ""}
+                        </div>
+                      )}
 
                       <div style={styles.progressTrack}>
                         <div
                           style={{
                             ...styles.progressFill,
-                            width: `${progressPercent}%`,
+                            width: `${ranked ? progressPercent : 0}%`,
                           }}
                         />
                       </div>
 
                       <div style={styles.rowMeta}>
-                        <span>{(row.progressMeters / 1000).toFixed(1)} km</span>
                         <span>
-                          {row.speedKmH
-                            ? `${row.speedKmH.toFixed(1)} km/h`
-                            : "-- km/h"}
+                          {ranked
+                            ? `${(row.progressMeters / 1000).toFixed(1)} km`
+                            : "Sin avance"}
+                        </span>
+                        <span>
+                          {remainingMeters !== null && ranked
+                            ? `${(remainingMeters / 1000).toFixed(1)} km rest.`
+                            : row.speedKmH
+                              ? `${row.speedKmH.toFixed(1)} km/h`
+                              : "--"}
                         </span>
                         <span>{formatLastSeen(row.updatedAt)}</span>
                       </div>
@@ -452,6 +615,26 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 900,
     textTransform: "uppercase",
   },
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  closeButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 28,
+    height: 28,
+    border: 0,
+    borderRadius: 6,
+    background: "rgba(17,24,39,0.12)",
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: 900,
+    cursor: "pointer",
+  },
   liveDot: {
     width: 8,
     height: 8,
@@ -543,7 +726,7 @@ const styles: Record<string, CSSProperties> = {
     gap: 8,
     alignItems: "center",
   },
-  bib: {
+  rank: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -555,6 +738,14 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 13,
     fontWeight: 900,
     flexShrink: 0,
+  },
+  rankLeader: {
+    background: "#f5c518",
+    color: "#111827",
+  },
+  rankPending: {
+    background: "#e5e7eb",
+    color: "#6b7280",
   },
   nameBlock: {
     minWidth: 0,
@@ -599,6 +790,17 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 10,
     overflow: "hidden",
     background: "#e5e7eb",
+  },
+  routeAlert: {
+    marginTop: 8,
+    borderLeft: "3px solid #dc2626",
+    padding: "5px 7px",
+    background: "#fef2f2",
+    color: "#991b1b",
+    fontSize: 11,
+    lineHeight: "14px",
+    fontWeight: 900,
+    textTransform: "uppercase",
   },
   progressFill: {
     height: "100%",

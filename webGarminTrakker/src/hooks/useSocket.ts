@@ -81,6 +81,13 @@ export function useSocket(
       username?: string;
       email?: string;
       progressMeters?: number;
+      progressSource?: "route" | "device";
+      remainingMeters?: number;
+      routeLengthMeters?: number;
+      progressPercent?: number;
+      distanceFromRouteMeters?: number;
+      isOffRoute?: boolean;
+      routeLayerId?: string;
       speedKmH?: number;
       currentSpeedKmH?: number;
     }) => {
@@ -102,6 +109,13 @@ export function useSocket(
         },
         updatedAt: payload.last_update,
         progressMeters: payload.progressMeters,
+        progressSource: payload.progressSource,
+        remainingMeters: payload.remainingMeters,
+        routeLengthMeters: payload.routeLengthMeters,
+        progressPercent: payload.progressPercent,
+        distanceFromRouteMeters: payload.distanceFromRouteMeters,
+        isOffRoute: payload.isOffRoute,
+        routeLayerId: payload.routeLayerId,
         speedKmH: payload.speedKmH,
         currentSpeedKmH: payload.currentSpeedKmH,
       });

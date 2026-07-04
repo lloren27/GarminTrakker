@@ -17,6 +17,13 @@ export interface TrackingParticipant {
     updatedAt: string;
   };
   progressMeters?: number;
+  progressSource?: "route" | "device";
+  remainingMeters?: number;
+  routeLengthMeters?: number;
+  progressPercent?: number;
+  distanceFromRouteMeters?: number;
+  isOffRoute?: boolean;
+  routeLayerId?: string;
   speedKmH?: number;
   currentSpeedKmH?: number;
   garminPaired?: boolean;

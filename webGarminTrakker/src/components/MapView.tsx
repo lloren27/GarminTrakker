@@ -143,6 +143,13 @@ const buildLiveUserFromParticipant = (
     updatedAt: parseUpdateTime(location.updatedAt),
     isOwner: participant.role === "owner",
     progressMeters: participant.progressMeters,
+    progressSource: participant.progressSource,
+    remainingMeters: participant.remainingMeters,
+    routeLengthMeters: participant.routeLengthMeters,
+    progressPercent: participant.progressPercent,
+    distanceFromRouteMeters: participant.distanceFromRouteMeters,
+    isOffRoute: participant.isOffRoute,
+    routeLayerId: participant.routeLayerId,
     speedKmH: participant.speedKmH,
     currentSpeedKmH: participant.currentSpeedKmH,
     trail,
@@ -295,6 +302,34 @@ export default function MapView({
             payload.progressMeters ??
             previousUser?.progressMeters ??
             participant?.progressMeters,
+          progressSource:
+            payload.progressSource ??
+            previousUser?.progressSource ??
+            participant?.progressSource,
+          remainingMeters:
+            payload.remainingMeters ??
+            previousUser?.remainingMeters ??
+            participant?.remainingMeters,
+          routeLengthMeters:
+            payload.routeLengthMeters ??
+            previousUser?.routeLengthMeters ??
+            participant?.routeLengthMeters,
+          progressPercent:
+            payload.progressPercent ??
+            previousUser?.progressPercent ??
+            participant?.progressPercent,
+          distanceFromRouteMeters:
+            payload.distanceFromRouteMeters ??
+            previousUser?.distanceFromRouteMeters ??
+            participant?.distanceFromRouteMeters,
+          isOffRoute:
+            payload.isOffRoute ??
+            previousUser?.isOffRoute ??
+            participant?.isOffRoute,
+          routeLayerId:
+            payload.routeLayerId ??
+            previousUser?.routeLayerId ??
+            participant?.routeLayerId,
           speedKmH:
             payload.speedKmH ??
             previousUser?.speedKmH ??
@@ -324,6 +359,11 @@ export default function MapView({
 
   const liveUsers = useMemo(() => {
     return Object.values(users).sort((a, b) => {
+      const routeRankDelta =
+        Number(b.progressSource === "route" && Boolean(b.routeLayerId)) -
+        Number(a.progressSource === "route" && Boolean(a.routeLayerId));
+      if (routeRankDelta !== 0) return routeRankDelta;
+
       const progressDelta = (b.progressMeters ?? 0) - (a.progressMeters ?? 0);
       if (progressDelta !== 0) return progressDelta;
 
@@ -345,10 +385,17 @@ export default function MapView({
   }, []);
 
   const totalDistanceKm = useMemo(() => {
+    const routeLengthMeters = liveUsers.find(
+      (user) =>
+        user.progressSource === "route" &&
+        typeof user.routeLengthMeters === "number",
+    )?.routeLengthMeters;
+    if (routeLengthMeters) return routeLengthMeters / 1000;
+
     if (!routeGeoJson) return undefined;
 
     return calculateTotalDistanceKm(routeGeoJson);
-  }, [routeGeoJson]);
+  }, [liveUsers, routeGeoJson]);
 
   const selectedLiveUser = useMemo(() => {
     if (!selectedUserId) return liveUsers[0] ?? null;
@@ -356,7 +403,16 @@ export default function MapView({
   }, [liveUsers, selectedUserId]);
 
   const remainingDistanceKm = useMemo(() => {
-    if (!routeGeoJson || !selectedLiveUser) return undefined;
+    if (!selectedLiveUser) return undefined;
+
+    if (
+      selectedLiveUser.progressSource === "route" &&
+      typeof selectedLiveUser.remainingMeters === "number"
+    ) {
+      return selectedLiveUser.remainingMeters / 1000;
+    }
+
+    if (!routeGeoJson) return undefined;
 
     const progress = selectedLiveUser.trail.reduce(
       (previousCoveredDistanceKm, point) =>
@@ -378,6 +434,19 @@ export default function MapView({
     ).remainingDistanceKm;
   }, [routeGeoJson, selectedLiveUser]);
 
+  const officialRanking = useMemo(
+    () =>
+      new Map(
+        liveUsers
+          .filter(
+            (user) =>
+              user.progressSource === "route" && Boolean(user.routeLayerId),
+          )
+          .map((user, index) => [user.userId, index + 1]),
+      ),
+    [liveUsers],
+  );
+
   return (
     <div className="map-view" style={styles.wrapper}>
       <div className="map-view__status">
@@ -391,6 +460,14 @@ export default function MapView({
           totalDistanceKm={totalDistanceKm}
           remainingDistanceKm={remainingDistanceKm}
           averageSpeedKmH={selectedLiveUser?.speedKmH}
+          selectedRiderName={
+            selectedLiveUser ? getUserLabel(selectedLiveUser) : undefined
+          }
+          selectedProgressPercent={selectedLiveUser?.progressPercent}
+          selectedIsOffRoute={selectedLiveUser?.isOffRoute}
+          selectedDistanceFromRouteMeters={
+            selectedLiveUser?.distanceFromRouteMeters
+          }
         />
       </div>
 
@@ -465,10 +542,13 @@ export default function MapView({
           ) : null,
         )}
 
-        {liveUsers.map((user, index) => {
+        {liveUsers.map((user) => {
           const label = getUserLabel(user);
+          const officialRank = officialRanking.get(user.userId);
           const markerColor =
-            index === 0
+            user.isOffRoute
+              ? "#dc2626"
+              : officialRank === 1
               ? "#f5c518"
               : user.isOwner
                 ? "#ef4444"
@@ -487,9 +567,26 @@ export default function MapView({
                 <div>
                   <strong>{label}</strong>
                   <br />
-                  {index === 0 ? "Grupo de cabeza" : user.team ?? "Participante"}
+                  {officialRank
+                    ? `Puesto ${officialRank}`
+                    : "Pendiente de progreso GPX"}
                   <br />
                   Progreso: {((user.progressMeters ?? 0) / 1000).toFixed(1)} km
+                  {typeof user.remainingMeters === "number" && (
+                    <>
+                      <br />
+                      Restante: {(user.remainingMeters / 1000).toFixed(1)} km
+                    </>
+                  )}
+                  {user.isOffRoute && (
+                    <>
+                      <br />
+                      Fuera de ruta
+                      {typeof user.distanceFromRouteMeters === "number"
+                        ? ` (${Math.round(user.distanceFromRouteMeters)} m)`
+                        : ""}
+                    </>
+                  )}
                   <br />
                   Lat: {user.lat.toFixed(5)}
                   <br />
