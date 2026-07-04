@@ -8,6 +8,10 @@ import {
 } from "../models/liveTracking";
 import { User } from "../models/user";
 import { emitLocationUpdatedToUserGroups } from "../config/socket";
+import {
+  calculateRouteRank,
+  resolveUserRouteProgress,
+} from "./routeProgressService";
 
 const LIVE_PEER_MAX_AGE_MS = 10 * 60 * 1000;
 
@@ -88,7 +92,11 @@ const findNearestPeers = async (
   userId: ObjectId,
   progressMeters?: number,
   averageSpeedKmH?: number,
-): Promise<Pick<LiveTrackingSummary, "ahead" | "behind">> => {
+  routeLayerId?: string,
+  progressSource?: "route" | "device",
+): Promise<
+  Pick<LiveTrackingSummary, "ahead" | "behind" | "rank" | "participantCount">
+> => {
   if (typeof progressMeters !== "number" || !Number.isFinite(progressMeters)) {
     return { ahead: null, behind: null };
   }
@@ -104,14 +112,21 @@ const findNearestPeers = async (
     return { ahead: null, behind: null };
   }
 
+  const peerFilter: Record<string, unknown> = {
+    _id: { $ne: userId },
+    groups: { $in: groupIds },
+    "garminTracking.progressMeters": { $type: "number" },
+  };
+  if (routeLayerId) {
+    peerFilter["garminTracking.routeLayerId"] = routeLayerId;
+  } else if (progressSource) {
+    peerFilter["garminTracking.progressSource"] = progressSource;
+  }
+
   const peers = await db
     .collection<LiveTrackingUserProjection>("users")
     .find(
-      {
-        _id: { $ne: userId },
-        groups: { $in: groupIds },
-        "garminTracking.progressMeters": { $type: "number" },
-      },
+      peerFilter,
       {
         projection: {
           login: 1,
@@ -124,6 +139,7 @@ const findNearestPeers = async (
 
   let ahead: LiveTrackingPeer | null = null;
   let behind: LiveTrackingPeer | null = null;
+  const rankedPeerProgress: number[] = [];
 
   for (const peer of peers) {
     const peerProgress = peer.garminTracking?.progressMeters;
@@ -136,6 +152,7 @@ const findNearestPeers = async (
     if (!candidate) {
       continue;
     }
+    rankedPeerProgress.push(peerProgress);
 
     if (deltaMeters > 0) {
       if (!ahead || candidate.deltaMeters < ahead.deltaMeters) {
@@ -148,7 +165,12 @@ const findNearestPeers = async (
     }
   }
 
-  return { ahead, behind };
+  const ranking =
+    routeLayerId && progressSource === "route"
+      ? calculateRouteRank(progressMeters, rankedPeerProgress)
+      : {};
+
+  return { ahead, behind, ...ranking };
 };
 
 export const updateLiveTrackingLocation = async ({
@@ -168,12 +190,44 @@ export const updateLiveTrackingLocation = async ({
   const userObjectId = new ObjectId(userId);
   const db = await connectToDatabase();
   const lastUpdateIso = new Date().toISOString();
-  const progressMeters =
+  const existingUser = await db.collection<User>("users").findOne(
+    { _id: userObjectId },
+    { projection: { garminTracking: 1 } },
+  );
+  if (!existingUser) {
+    return null;
+  }
+
+  const deviceProgressMeters =
     typeof elapsedDistanceMeters === "number" &&
     Number.isFinite(elapsedDistanceMeters) &&
     elapsedDistanceMeters >= 0
       ? elapsedDistanceMeters
       : undefined;
+  const routeProgress = await resolveUserRouteProgress({
+    db,
+    userId: userObjectId,
+    latitude,
+    longitude,
+    preferredRouteLayerId: existingUser.garminTracking?.routeLayerId,
+    preferredProgressMeters:
+      typeof existingUser.garminTracking?.progressMeters === "number" &&
+      typeof existingUser.garminTracking?.elapsedDistanceMeters === "number" &&
+      typeof deviceProgressMeters === "number" &&
+      deviceProgressMeters >=
+        existingUser.garminTracking.elapsedDistanceMeters
+        ? existingUser.garminTracking.progressMeters +
+          deviceProgressMeters -
+          existingUser.garminTracking.elapsedDistanceMeters
+        : undefined,
+  });
+  const progressMeters = routeProgress?.progressMeters ?? deviceProgressMeters;
+  const progressSource =
+    routeProgress
+      ? "route"
+      : typeof deviceProgressMeters === "number"
+        ? "device"
+        : undefined;
   const averageSpeedKmH =
     typeof averageSpeedMps === "number" &&
     Number.isFinite(averageSpeedMps) &&
@@ -197,9 +251,35 @@ export const updateLiveTrackingLocation = async ({
     "garminTracking.last_update": lastUpdateIso,
   };
 
+  if (typeof deviceProgressMeters === "number") {
+    updateFields["garminTracking.elapsedDistanceMeters"] =
+      deviceProgressMeters;
+  }
+
   if (typeof progressMeters === "number") {
-    updateFields["garminTracking.elapsedDistanceMeters"] = progressMeters;
     updateFields["garminTracking.progressMeters"] = progressMeters;
+  }
+
+  if (progressSource) {
+    updateFields["garminTracking.progressSource"] = progressSource;
+  }
+
+  if (routeProgress) {
+    updateFields["garminTracking.remainingMeters"] =
+      routeProgress.remainingMeters;
+    updateFields["garminTracking.routeLengthMeters"] =
+      routeProgress.routeLengthMeters;
+    updateFields["garminTracking.progressPercent"] =
+      routeProgress.progressPercent;
+    updateFields["garminTracking.distanceFromRouteMeters"] =
+      routeProgress.distanceFromRouteMeters;
+    updateFields["garminTracking.isOffRoute"] = routeProgress.isOffRoute;
+    updateFields["garminTracking.routeLayerId"] = routeProgress.routeLayerId;
+    updateFields["garminTracking.groupId"] = routeProgress.groupId;
+    updateFields["garminTracking.snappedLatitude"] =
+      routeProgress.snappedLatitude;
+    updateFields["garminTracking.snappedLongitude"] =
+      routeProgress.snappedLongitude;
   }
 
   if (typeof averageSpeedKmH === "number") {
@@ -218,9 +298,22 @@ export const updateLiveTrackingLocation = async ({
     updateFields["garminTracking.timerTimeSeconds"] = timerTimeSeconds;
   }
 
+  const clearRouteFields = {
+    "garminTracking.remainingMeters": "",
+    "garminTracking.routeLengthMeters": "",
+    "garminTracking.progressPercent": "",
+    "garminTracking.distanceFromRouteMeters": "",
+    "garminTracking.isOffRoute": "",
+    "garminTracking.routeLayerId": "",
+    "garminTracking.groupId": "",
+    "garminTracking.snappedLatitude": "",
+    "garminTracking.snappedLongitude": "",
+  };
   const result = await db.collection("users").updateOne(
     { _id: userObjectId },
-    { $set: updateFields },
+    routeProgress
+      ? { $set: updateFields }
+      : { $set: updateFields, $unset: clearRouteFields },
   );
 
   if (!result.acknowledged || result.matchedCount === 0) {
@@ -235,16 +328,28 @@ export const updateLiveTrackingLocation = async ({
     progressMeters,
     averageSpeedKmH,
     currentSpeedKmH,
+    routeProgress,
+    progressSource,
   });
 
   const peers = await findNearestPeers(
     userObjectId,
     progressMeters,
     averageSpeedKmH,
+    routeProgress?.routeLayerId,
+    progressSource,
   );
 
   return {
     progressMeters,
+    progressSource,
+    remainingMeters: routeProgress?.remainingMeters,
+    routeLengthMeters: routeProgress?.routeLengthMeters,
+    progressPercent: routeProgress?.progressPercent,
+    distanceFromRouteMeters: routeProgress?.distanceFromRouteMeters,
+    isOffRoute: routeProgress?.isOffRoute,
+    routeLayerId: routeProgress?.routeLayerId,
+    groupId: routeProgress?.groupId,
     last_update: lastUpdateIso,
     ...peers,
   };

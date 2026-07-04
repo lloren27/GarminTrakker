@@ -23,6 +23,16 @@ export interface LiveTrackingPeer {
 
 export interface LiveTrackingSummary {
   progressMeters?: number;
+  rank?: number;
+  participantCount?: number;
+  progressSource?: "route" | "device";
+  remainingMeters?: number;
+  routeLengthMeters?: number;
+  progressPercent?: number;
+  distanceFromRouteMeters?: number;
+  isOffRoute?: boolean;
+  routeLayerId?: string;
+  groupId?: string;
   last_update: string;
   ahead: LiveTrackingPeer | null;
   behind: LiveTrackingPeer | null;
@@ -31,6 +41,16 @@ export interface LiveTrackingSummary {
 export interface UserGarminTracking {
   elapsedDistanceMeters?: number;
   progressMeters?: number;
+  progressSource?: "route" | "device";
+  remainingMeters?: number;
+  routeLengthMeters?: number;
+  progressPercent?: number;
+  distanceFromRouteMeters?: number;
+  isOffRoute?: boolean;
+  routeLayerId?: string;
+  groupId?: string;
+  snappedLatitude?: number;
+  snappedLongitude?: number;
   averageSpeedKmH?: number;
   currentSpeedKmH?: number;
   timerTimeSeconds?: number;

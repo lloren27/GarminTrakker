@@ -4,7 +4,7 @@ import { connectToDatabase } from "../config/db";
 import { GarminDevice, GarminPairing } from "../models/garminDevice";
 
 const PAIRING_CODE_LENGTH = 8;
-const PAIRING_TTL_MS = 10 * 60 * 1000;
+const PAIRING_TTL_MS = 20 * 60 * 1000;
 const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const DEVICE_ONLINE_MAX_AGE_MS = 2 * 60 * 1000;
 

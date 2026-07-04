@@ -5,6 +5,7 @@ import { Group } from "../models/group";
 import { GroupLayer } from "../models/groupLayer";
 import { GroupLayerPreference } from "../models/groupLayerPreference";
 import { User } from "../models/user";
+import { projectPositionOnRoute } from "../services/routeProgressService";
 
 const PASSWORD = "Garmin123!";
 const USER_IDS = {
@@ -59,7 +60,6 @@ const createUser = ({
   email,
   latitude,
   longitude,
-  progressMeters,
   lastUpdate,
 }: {
   _id: ObjectId;
@@ -67,9 +67,19 @@ const createUser = ({
   email: string;
   latitude: number;
   longitude: number;
-  progressMeters: number;
   lastUpdate: string;
-}): User => ({
+}): User => {
+  const routeProgress = projectPositionOnRoute({
+    latitude,
+    longitude,
+    geoJson: routeGeoJson,
+  });
+
+  if (!routeProgress) {
+    throw new Error(`No se pudo proyectar al usuario demo ${login}`);
+  }
+
+  return {
   _id,
   login,
   loginLower: login.toLowerCase(),
@@ -82,8 +92,18 @@ const createUser = ({
     last_update: lastUpdate,
   },
   garminTracking: {
-    elapsedDistanceMeters: progressMeters,
-    progressMeters,
+    elapsedDistanceMeters: routeProgress.progressMeters,
+    progressMeters: routeProgress.progressMeters,
+    progressSource: "route",
+    remainingMeters: routeProgress.remainingMeters,
+    routeLengthMeters: routeProgress.routeLengthMeters,
+    progressPercent: routeProgress.progressPercent,
+    distanceFromRouteMeters: routeProgress.distanceFromRouteMeters,
+    isOffRoute: routeProgress.isOffRoute,
+    routeLayerId: ROUTE_LAYER_ID.toString(),
+    groupId: GROUP_ID.toString(),
+    snappedLatitude: routeProgress.snappedLatitude,
+    snappedLongitude: routeProgress.snappedLongitude,
     source: "connect_iq",
     last_update: lastUpdate,
   },
@@ -97,7 +117,8 @@ const createUser = ({
   createdAt: lastUpdate,
   updatedAt: lastUpdate,
   lastLoginAt: lastUpdate,
-});
+  };
+};
 
 const seedDemoData = async () => {
   const db = await connectToDatabase();
@@ -111,7 +132,6 @@ const seedDemoData = async () => {
       email: "lloren@garmintrakker.local",
       latitude: 43.32321,
       longitude: -5.02013,
-      progressMeters: 12000,
       lastUpdate: nowIso,
     }),
     createUser({
@@ -120,7 +140,6 @@ const seedDemoData = async () => {
       email: "ana@garmintrakker.local",
       latitude: 43.31816,
       longitude: -5.01277,
-      progressMeters: 12500,
       lastUpdate: nowIso,
     }),
     createUser({
@@ -129,7 +148,6 @@ const seedDemoData = async () => {
       email: "miguel@garmintrakker.local",
       latitude: 43.32884,
       longitude: -5.02678,
-      progressMeters: 11500,
       lastUpdate: nowIso,
     }),
     createUser({
@@ -138,7 +156,6 @@ const seedDemoData = async () => {
       email: "sara@garmintrakker.local",
       latitude: 43.30904,
       longitude: -4.99721,
-      progressMeters: 13200,
       lastUpdate: nowIso,
     }),
   ];

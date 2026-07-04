@@ -15,7 +15,7 @@
     "seed-users": "npm run seed:demo",
     "seed-groups": "npm run seed:demo",
     "lint": "eslint 'src/**/*.ts'",
-    "test": "echo \"No test specified\" && exit 1",
+    "test": "ts-node tests/routeProgressService.test.ts",
     "migrate-users": "cross-env NODE_ENV=development ts-node src/scripts/migrateUsers.ts",
     "migrate-users:prod": "cross-env NODE_ENV=production ts-node src/scripts/migrateUsers.ts"
   },

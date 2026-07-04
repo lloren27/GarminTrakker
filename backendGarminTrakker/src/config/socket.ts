@@ -6,6 +6,7 @@ import { User } from "../models/user";
 import { corsOrigin } from "./cors";
 import { Group } from "../models/group";
 import { getGarminStatusByUserIds } from "../services/garminDeviceService";
+import { UserRouteProgress } from "../services/routeProgressService";
 
 type SocketUserPayload = {
   userId: string;
@@ -41,6 +42,8 @@ export const emitLocationUpdatedToUserGroups = async (
     progressMeters,
     averageSpeedKmH,
     currentSpeedKmH,
+    routeProgress,
+    progressSource,
   }: {
     userId: string;
     latitude: number;
@@ -49,6 +52,8 @@ export const emitLocationUpdatedToUserGroups = async (
     progressMeters?: number;
     averageSpeedKmH?: number;
     currentSpeedKmH?: number;
+    routeProgress?: UserRouteProgress | null;
+    progressSource?: "route" | "device";
   },
 ): Promise<boolean> => {
   if (!socketServer || !ObjectId.isValid(userId)) {
@@ -68,6 +73,9 @@ export const emitLocationUpdatedToUserGroups = async (
   const groupIds = (user.groups || []).map((groupId) => groupId.toString());
 
   for (const groupId of groupIds) {
+    const hasProgressForGroup =
+      !routeProgress || routeProgress.groupId === groupId;
+
     socketServer.to(`group:${groupId}`).emit("locationUpdated", {
       userId,
       groupId,
@@ -76,7 +84,26 @@ export const emitLocationUpdatedToUserGroups = async (
       last_update: lastUpdateIso,
       username: user.login,
       email: user.email,
-      progressMeters,
+      progressMeters: hasProgressForGroup ? progressMeters : undefined,
+      progressSource: hasProgressForGroup ? progressSource : undefined,
+      remainingMeters: hasProgressForGroup
+        ? routeProgress?.remainingMeters
+        : undefined,
+      routeLengthMeters: hasProgressForGroup
+        ? routeProgress?.routeLengthMeters
+        : undefined,
+      progressPercent: hasProgressForGroup
+        ? routeProgress?.progressPercent
+        : undefined,
+      distanceFromRouteMeters: hasProgressForGroup
+        ? routeProgress?.distanceFromRouteMeters
+        : undefined,
+      isOffRoute: hasProgressForGroup
+        ? routeProgress?.isOffRoute
+        : undefined,
+      routeLayerId: hasProgressForGroup
+        ? routeProgress?.routeLayerId
+        : undefined,
       speedKmH: averageSpeedKmH,
       currentSpeedKmH,
     });
@@ -126,7 +153,40 @@ const getGroupSnapshot = async (group: Group & { _id: ObjectId }) => {
             updatedAt: user.location.last_update,
           }
         : undefined,
-      progressMeters: user.garminTracking?.progressMeters,
+      progressMeters:
+        !user.garminTracking?.groupId ||
+        user.garminTracking.groupId === group._id.toString()
+          ? user.garminTracking?.progressMeters
+          : undefined,
+      progressSource:
+        !user.garminTracking?.groupId ||
+        user.garminTracking.groupId === group._id.toString()
+          ? user.garminTracking?.progressSource
+          : undefined,
+      remainingMeters:
+        user.garminTracking?.groupId === group._id.toString()
+          ? user.garminTracking?.remainingMeters
+          : undefined,
+      routeLengthMeters:
+        user.garminTracking?.groupId === group._id.toString()
+          ? user.garminTracking?.routeLengthMeters
+          : undefined,
+      progressPercent:
+        user.garminTracking?.groupId === group._id.toString()
+          ? user.garminTracking?.progressPercent
+          : undefined,
+      distanceFromRouteMeters:
+        user.garminTracking?.groupId === group._id.toString()
+          ? user.garminTracking?.distanceFromRouteMeters
+          : undefined,
+      isOffRoute:
+        user.garminTracking?.groupId === group._id.toString()
+          ? user.garminTracking?.isOffRoute
+          : undefined,
+      routeLayerId:
+        user.garminTracking?.groupId === group._id.toString()
+          ? user.garminTracking?.routeLayerId
+          : undefined,
       speedKmH: user.garminTracking?.averageSpeedKmH,
       currentSpeedKmH: user.garminTracking?.currentSpeedKmH,
       garminPaired: deviceStatus?.paired ?? false,

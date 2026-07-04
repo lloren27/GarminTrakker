@@ -259,7 +259,40 @@ export const getGroupTracking = async (req: Request, res: Response) => {
             updatedAt: user.location.last_update,
           }
         : undefined,
-      progressMeters: user.garminTracking?.progressMeters,
+      progressMeters:
+        !user.garminTracking?.groupId ||
+        user.garminTracking.groupId === groupId
+          ? user.garminTracking?.progressMeters
+          : undefined,
+      progressSource:
+        !user.garminTracking?.groupId ||
+        user.garminTracking.groupId === groupId
+          ? user.garminTracking?.progressSource
+          : undefined,
+      remainingMeters:
+        user.garminTracking?.groupId === groupId
+          ? user.garminTracking?.remainingMeters
+          : undefined,
+      routeLengthMeters:
+        user.garminTracking?.groupId === groupId
+          ? user.garminTracking?.routeLengthMeters
+          : undefined,
+      progressPercent:
+        user.garminTracking?.groupId === groupId
+          ? user.garminTracking?.progressPercent
+          : undefined,
+      distanceFromRouteMeters:
+        user.garminTracking?.groupId === groupId
+          ? user.garminTracking?.distanceFromRouteMeters
+          : undefined,
+      isOffRoute:
+        user.garminTracking?.groupId === groupId
+          ? user.garminTracking?.isOffRoute
+          : undefined,
+      routeLayerId:
+        user.garminTracking?.groupId === groupId
+          ? user.garminTracking?.routeLayerId
+          : undefined,
       speedKmH: user.garminTracking?.averageSpeedKmH,
       currentSpeedKmH: user.garminTracking?.currentSpeedKmH,
       garminPaired:
