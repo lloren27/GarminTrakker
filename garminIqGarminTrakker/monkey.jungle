@@ -1,1 +1,12 @@
 project.manifest = manifest.xml
+
+edge530.excludeAnnotations = live
+edge830.excludeAnnotations = live
+edge1030.excludeAnnotations = live
+edge1030plus.excludeAnnotations = live
+
+edge540.excludeAnnotations = legacy
+edge840.excludeAnnotations = legacy
+edge1040.excludeAnnotations = legacy
+edge850.excludeAnnotations = legacy
+edge1050.excludeAnnotations = legacy

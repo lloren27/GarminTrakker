@@ -14,6 +14,13 @@ export type LiveUser = {
   updatedAt: number;
   isOwner?: boolean;
   progressMeters?: number;
+  progressSource?: "route" | "device";
+  remainingMeters?: number;
+  routeLengthMeters?: number;
+  progressPercent?: number;
+  distanceFromRouteMeters?: number;
+  isOffRoute?: boolean;
+  routeLayerId?: string;
   speedKmH?: number;
   currentSpeedKmH?: number;
   bib?: string;
@@ -31,6 +38,13 @@ export interface UserLocationUpdate {
   };
   isOwner?: boolean;
   progressMeters?: number;
+  progressSource?: "route" | "device";
+  remainingMeters?: number;
+  routeLengthMeters?: number;
+  progressPercent?: number;
+  distanceFromRouteMeters?: number;
+  isOffRoute?: boolean;
+  routeLayerId?: string;
   speedKmH?: number;
   currentSpeedKmH?: number;
   bib?: string;

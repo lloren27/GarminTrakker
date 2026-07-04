@@ -12,6 +12,7 @@
             <iq:product id="edge1050"/>
         </iq:products>
         <iq:permissions>
+            <iq:uses-permission id="Background"/>
             <iq:uses-permission id="Communications"/>
         </iq:permissions>
         <iq:languages>

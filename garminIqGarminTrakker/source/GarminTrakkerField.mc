@@ -8,7 +8,7 @@ import Toybox.System;
 import Toybox.Time;
 import Toybox.WatchUi;
 
-class GarminTrakkerField extends WatchUi.DataField {
+class GarminTrakkerLiveField extends WatchUi.DataField {
     private var _distanceMeters as Float?;
     private var _hasLocation as Boolean;
     private var _status as String;
@@ -16,6 +16,14 @@ class GarminTrakkerField extends WatchUi.DataField {
     private var _requestInFlight as Boolean;
     private var _aheadLabel as String;
     private var _behindLabel as String;
+    private var _routeProgressMeters as Float?;
+    private var _remainingMeters as Float?;
+    private var _progressPercent as Float?;
+    private var _distanceFromRouteMeters as Float?;
+    private var _isOffRoute as Boolean;
+    private var _rank as Number?;
+    private var _participantCount as Number?;
+    private var _lastSyncEpoch as Number;
     private var _deviceId as String;
     private var _deviceToken as String?;
     private var _pairingCode as String?;
@@ -31,10 +39,19 @@ class GarminTrakkerField extends WatchUi.DataField {
         _requestInFlight = false;
         _aheadLabel = "UP --";
         _behindLabel = "DN --";
+        _routeProgressMeters = null;
+        _remainingMeters = null;
+        _progressPercent = null;
+        _distanceFromRouteMeters = null;
+        _isOffRoute = false;
+        _rank = null;
+        _participantCount = null;
+        _lastSyncEpoch = 0;
         _deviceId = getDeviceId();
         _deviceToken = getStoredDeviceToken();
         _pairingCode = null;
         _lastPairingRequestEpoch = 0;
+        refreshStoredSummary();
 
         if (_deviceToken == null) {
             _status = "PAIRING";
@@ -81,16 +98,31 @@ class GarminTrakkerField extends WatchUi.DataField {
             return;
         }
 
-        var distanceLabel = formatDistance(_distanceMeters);
-        dc.drawText(centerX, 50, Graphics.FONT_SMALL, _aheadLabel, Graphics.TEXT_JUSTIFY_CENTER);
+        var distanceLabel = formatDistance(
+            _routeProgressMeters != null ? _routeProgressMeters : _distanceMeters
+        );
+        dc.drawText(centerX, 34, Graphics.FONT_XTINY, formatRanking(), Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, 58, Graphics.FONT_SMALL, _aheadLabel, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(centerX, height / 2, Graphics.FONT_NUMBER_MEDIUM, distanceLabel, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(centerX, height - 70, Graphics.FONT_SMALL, _behindLabel, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(centerX, height - 78, Graphics.FONT_SMALL, _behindLabel, Graphics.TEXT_JUSTIFY_CENTER);
 
+        if (_isOffRoute) {
+            dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
+        }
         dc.drawText(
             centerX,
-            height - 36,
+            height - 50,
             Graphics.FONT_SMALL,
-            _status,
+            formatRouteStatus(),
+            Graphics.TEXT_JUSTIFY_CENTER
+        );
+
+        dc.setColor(fgColor, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(
+            centerX,
+            height - 26,
+            Graphics.FONT_XTINY,
+            formatSyncStatus(),
             Graphics.TEXT_JUSTIFY_CENTER
         );
     }
@@ -240,6 +272,7 @@ class GarminTrakkerField extends WatchUi.DataField {
 
         var deviceToken = data["deviceToken"];
         if (deviceToken instanceof String && deviceToken.length() > 0) {
+            clearLiveSummary();
             Storage.setValue("deviceToken", deviceToken);
             _deviceToken = deviceToken;
             _pairingCode = null;
@@ -328,6 +361,7 @@ class GarminTrakkerField extends WatchUi.DataField {
 
         if (responseCode == 401) {
             Storage.deleteValue("deviceToken");
+            clearLiveSummary();
             _deviceToken = null;
             _pairingCode = null;
             _lastPairingRequestEpoch = 0;
@@ -341,7 +375,7 @@ class GarminTrakkerField extends WatchUi.DataField {
         }
 
         if (data instanceof Dictionary) {
-            updatePeerLabels(data);
+            applyLiveSummary(data);
         }
 
         _status = "SYNC OK";
@@ -353,6 +387,142 @@ class GarminTrakkerField extends WatchUi.DataField {
 
         _aheadLabel = formatPeer("UP", ahead);
         _behindLabel = formatPeer("DN", behind);
+    }
+
+    private function applyLiveSummary(data as Dictionary) as Void {
+        updatePeerLabels(data);
+
+        _routeProgressMeters = getFloat(data["progressMeters"]);
+        _remainingMeters = getFloat(data["remainingMeters"]);
+        _progressPercent = getFloat(data["progressPercent"]);
+        _distanceFromRouteMeters = getFloat(data["distanceFromRouteMeters"]);
+        _rank = getNumber(data["rank"]);
+        _participantCount = getNumber(data["participantCount"]);
+
+        var offRoute = data["isOffRoute"];
+        _isOffRoute = offRoute instanceof Boolean ? offRoute : false;
+        _lastSyncEpoch = Time.now().value();
+
+        Storage.setValue("liveSummary", {
+            "ahead" => data["ahead"],
+            "behind" => data["behind"],
+            "progressMeters" => data["progressMeters"],
+            "remainingMeters" => data["remainingMeters"],
+            "progressPercent" => data["progressPercent"],
+            "distanceFromRouteMeters" => data["distanceFromRouteMeters"],
+            "isOffRoute" => data["isOffRoute"],
+            "rank" => data["rank"],
+            "participantCount" => data["participantCount"],
+            "syncedAtEpoch" => _lastSyncEpoch
+        });
+    }
+
+    private function refreshStoredSummary() as Void {
+        var summary = Storage.getValue("liveSummary");
+        if (!(summary instanceof Dictionary)) {
+            return;
+        }
+
+        updatePeerLabels(summary);
+        _routeProgressMeters = getFloat(summary["progressMeters"]);
+        _remainingMeters = getFloat(summary["remainingMeters"]);
+        _progressPercent = getFloat(summary["progressPercent"]);
+        _distanceFromRouteMeters = getFloat(summary["distanceFromRouteMeters"]);
+        _rank = getNumber(summary["rank"]);
+        _participantCount = getNumber(summary["participantCount"]);
+
+        var offRoute = summary["isOffRoute"];
+        _isOffRoute = offRoute instanceof Boolean ? offRoute : false;
+
+        var syncedAt = summary["syncedAtEpoch"];
+        if (syncedAt instanceof Number) {
+            _lastSyncEpoch = syncedAt;
+        }
+    }
+
+    private function clearLiveSummary() as Void {
+        Storage.deleteValue("liveSummary");
+        _routeProgressMeters = null;
+        _remainingMeters = null;
+        _progressPercent = null;
+        _distanceFromRouteMeters = null;
+        _isOffRoute = false;
+        _rank = null;
+        _participantCount = null;
+        _lastSyncEpoch = 0;
+        _aheadLabel = "UP --";
+        _behindLabel = "DN --";
+    }
+
+    private function getFloat(value as Object?) as Float? {
+        if (value instanceof Float) {
+            return value;
+        }
+        if (value instanceof Number) {
+            return value.toFloat();
+        }
+
+        return null;
+    }
+
+    private function getNumber(value as Object?) as Number? {
+        if (value instanceof Number) {
+            return value;
+        }
+        if (value instanceof Float) {
+            return value.toNumber();
+        }
+
+        return null;
+    }
+
+    private function formatRanking() as String {
+        var rankLabel = "P --/--";
+        if (_rank != null && _participantCount != null) {
+            rankLabel = "P " + _rank.format("%d") + "/" + _participantCount.format("%d");
+        }
+
+        if (_progressPercent != null) {
+            rankLabel += " | " + _progressPercent.format("%.0f") + "%";
+        }
+
+        return rankLabel;
+    }
+
+    private function formatRouteStatus() as String {
+        if (_isOffRoute) {
+            if (_distanceFromRouteMeters != null) {
+                return "OFF ROUTE " + _distanceFromRouteMeters.format("%.0f") + "m";
+            }
+            return "OFF ROUTE";
+        }
+
+        if (_remainingMeters != null) {
+            return "REST " + formatCompactDistance(_remainingMeters);
+        }
+
+        return "WAIT ROUTE";
+    }
+
+    private function formatSyncStatus() as String {
+        if (_lastSyncEpoch <= 0) {
+            return _status;
+        }
+
+        var ageSeconds = Time.now().value() - _lastSyncEpoch;
+        if (ageSeconds < 60) {
+            return "LIVE " + ageSeconds.format("%d") + "s";
+        }
+
+        return "LIVE " + (ageSeconds / 60).format("%d") + "m";
+    }
+
+    private function formatCompactDistance(distanceMeters as Float) as String {
+        if (distanceMeters >= 1000.0f) {
+            return (distanceMeters / 1000.0f).format("%.1f") + "km";
+        }
+
+        return distanceMeters.format("%.0f") + "m";
     }
 
     private function formatPeer(prefix as String, peer as Object?) as String {
@@ -368,7 +538,8 @@ class GarminTrakkerField extends WatchUi.DataField {
         }
 
         var gapSeconds = peer["gapSeconds"];
-        var label = prefix + " " + name + " " + formatDelta(deltaMeters);
+        var shortName = name.length() > 8 ? name.substring(0, 8) : name;
+        var label = prefix + " " + shortName + " " + formatDelta(deltaMeters);
 
         if (gapSeconds instanceof Number) {
             label += " " + formatGapTime(gapSeconds);
