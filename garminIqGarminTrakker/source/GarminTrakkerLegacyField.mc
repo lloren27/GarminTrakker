@@ -2,6 +2,7 @@ import Toybox.Activity;
 import Toybox.Application.Storage;
 import Toybox.Graphics;
 import Toybox.Lang;
+import Toybox.Position;
 import Toybox.System;
 import Toybox.Time;
 import Toybox.WatchUi;
@@ -46,12 +47,13 @@ class GarminTrakkerLegacyField extends WatchUi.DataField {
         _distanceMeters = info.elapsedDistance;
         refreshStoredState();
 
+        var location = getBestLocation(info);
         var now = Time.now().value();
         if (
-            info.currentLocation != null &&
+            location != null &&
             (now - _lastTelemetrySaveEpoch) >= GarminTrakkerConfig.SEND_INTERVAL_SECONDS
         ) {
-            saveLatestTelemetry(info, now);
+            saveLatestTelemetry(info, location, now);
             _lastTelemetrySaveEpoch = now;
         }
     }
@@ -123,10 +125,26 @@ class GarminTrakkerLegacyField extends WatchUi.DataField {
         );
     }
 
-    private function saveLatestTelemetry(info as Activity.Info, now as Number) as Void {
-        var location = info.currentLocation;
+    private function getBestLocation(info as Activity.Info) as Position.Location? {
+        if (info.currentLocation != null) {
+            return info.currentLocation;
+        }
+
+        try {
+            var positionInfo = Position.getInfo();
+            if (positionInfo != null && positionInfo.position != null) {
+                return positionInfo.position;
+            }
+        } catch (ex) {
+            System.println("GarminTrakker position fallback error: " + ex.toString());
+        }
+
+        return null;
+    }
+
+    private function saveLatestTelemetry(info as Activity.Info, location as Position.Location, now as Number) as Void {
         var elapsedDistance = info.elapsedDistance;
-        if (location == null || elapsedDistance == null) {
+        if (elapsedDistance == null) {
             return;
         }
 

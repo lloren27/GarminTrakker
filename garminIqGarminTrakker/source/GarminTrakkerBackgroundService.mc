@@ -16,8 +16,11 @@ class GarminTrakkerBackgroundService extends System.ServiceDelegate {
 
         var deviceId = Storage.getValue("deviceId");
         if (!(deviceId instanceof String)) {
-            finish("OPEN FIELD");
-            return;
+            var identifier = System.getDeviceSettings().uniqueIdentifier;
+            deviceId = identifier instanceof String
+                ? identifier
+                : "garmintrakker-edge530";
+            Storage.setValue("deviceId", deviceId);
         }
 
         var deviceToken = Storage.getValue("deviceToken");

@@ -60,16 +60,17 @@ class GarminTrakkerLiveField extends WatchUi.DataField {
 
     public function compute(info as Activity.Info) as Void {
         _distanceMeters = info.elapsedDistance;
-        _hasLocation = info.currentLocation != null;
+        var location = getBestLocation(info);
+        _hasLocation = location != null;
 
         if (_deviceToken == null) {
             handlePairing();
             return;
         }
 
-        if (_hasLocation) {
+        if (location != null) {
             _status = "READY";
-            sendLocationIfDue(info);
+            sendLocationIfDue(info, location);
         } else {
             _status = "WAIT GPS";
         }
@@ -291,13 +292,25 @@ class GarminTrakkerLiveField extends WatchUi.DataField {
         return (distanceMeters / 1000.0f).format("%.1f") + " km";
     }
 
-    private function sendLocationIfDue(info as Activity.Info) as Void {
-        if (_requestInFlight) {
-            return;
+    private function getBestLocation(info as Activity.Info) as Position.Location? {
+        if (info.currentLocation != null) {
+            return info.currentLocation;
         }
 
-        var location = info.currentLocation;
-        if (location == null) {
+        try {
+            var positionInfo = Position.getInfo();
+            if (positionInfo != null && positionInfo.position != null) {
+                return positionInfo.position;
+            }
+        } catch (ex) {
+            System.println("GarminTrakker position fallback error: " + ex.toString());
+        }
+
+        return null;
+    }
+
+    private function sendLocationIfDue(info as Activity.Info, location as Position.Location) as Void {
+        if (_requestInFlight) {
             return;
         }
 
