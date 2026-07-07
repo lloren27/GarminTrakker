@@ -339,13 +339,30 @@ export default function ActiveUsersPanel({
             ...(isMobile ? styles.containerMobile : {}),
           }}
         >
-          <div style={styles.header}>
-            <div>
+          <div
+            style={{
+              ...styles.header,
+              ...(isMobile ? styles.headerMobile : {}),
+            }}
+          >
+            <div style={isMobile ? styles.headerTitleBlockMobile : undefined}>
               <div style={styles.eyebrow}>Avance sobre el recorrido</div>
-              <h2 style={styles.title}>Clasificación en directo</h2>
+              <h2
+                style={{
+                  ...styles.title,
+                  ...(isMobile ? styles.titleMobile : {}),
+                }}
+              >
+                Clasificación en directo
+              </h2>
             </div>
             <div style={styles.headerActions}>
-              <div style={styles.livePill}>
+              <div
+                style={{
+                  ...styles.livePill,
+                  ...(isMobile ? styles.livePillMobile : {}),
+                }}
+              >
                 <span style={styles.liveDot} />
                 Directo
               </div>
@@ -353,7 +370,10 @@ export default function ActiveUsersPanel({
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  style={styles.closeButton}
+                  style={{
+                    ...styles.closeButton,
+                    ...(isMobile ? styles.closeButtonMobile : {}),
+                  }}
                   aria-label="Ocultar clasificación"
                   title="Ocultar clasificación"
                 >
@@ -578,7 +598,8 @@ const styles: Record<string, CSSProperties> = {
     backdropFilter: "blur(12px)",
   },
   containerMobile: {
-    maxHeight: "54vh",
+    maxHeight: "min(54dvh, 430px)",
+    overflowX: "hidden",
   },
   header: {
     display: "flex",
@@ -588,6 +609,13 @@ const styles: Record<string, CSSProperties> = {
     padding: "14px 14px 10px",
     background: "linear-gradient(90deg, #111827 0%, #374151 58%, #f5c518 58%, #f5c518 100%)",
     color: "#fff",
+  },
+  headerMobile: {
+    background: "#111827",
+    padding: "12px 12px 10px",
+  },
+  headerTitleBlockMobile: {
+    minWidth: 0,
   },
   eyebrow: {
     color: "#f5c518",
@@ -602,6 +630,10 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: "24px",
     letterSpacing: 0,
   },
+  titleMobile: {
+    fontSize: 18,
+    lineHeight: "22px",
+  },
   livePill: {
     display: "inline-flex",
     alignItems: "center",
@@ -614,6 +646,11 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 12,
     fontWeight: 900,
     textTransform: "uppercase",
+  },
+  livePillMobile: {
+    background: "#f5c518",
+    padding: "5px 7px",
+    fontSize: 11,
   },
   headerActions: {
     display: "flex",
@@ -634,6 +671,10 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 14,
     fontWeight: 900,
     cursor: "pointer",
+  },
+  closeButtonMobile: {
+    background: "#f5c518",
+    color: "#111827",
   },
   liveDot: {
     width: 8,

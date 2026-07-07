@@ -22,16 +22,18 @@
 
 @media (max-width: 767px) {
   .map-view__status {
-    top: 12px;
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
     left: 12px;
     right: 12px;
     max-width: none;
   }
 
   .map-view__users {
+    position: fixed;
     top: auto;
     right: 12px;
-    bottom: 68px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
     left: 12px;
     max-width: none;
     display: flex;
